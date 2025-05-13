@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Script Editor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/monokai.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .editor-container {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .CodeMirror {
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .result-container {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .script-list {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .script-item {
+            cursor: pointer;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .script-item:hover {
+            background-color: #f0f0f0;
+        }
+        .table-responsive {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .actions-column {
+            min-width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">SQL Script Editor</h1>
+        
+        <div class="row">
+            <!-- Left Column: Script List -->
+            <div class="col-md-3">
+                <div class="script-list mb-3">
+                    <h5>Saved Scripts</h5>
+                    <div class="list-group" id="scriptsList">
+                        <!-- Script items will be loaded here -->
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button class="btn btn-primary" id="btnNewScript">New Script</button>
+                </div>
+            </div>
+            
+            <!-- Right Column: Editor and Results -->
+            <div class="col-md-9">
+                <div class="editor-container">
+                    <div class="mb-3">
+                        <label for="scriptName" class="form-label">Script Name</label>
+                        <input type="text" class="form-control" id="scriptName" placeholder="Enter script name">
+                    </div>
+                    <div class="mb-3">
+                        <label for="scriptDescription" class="form-label">Description (optional)</label>
+                        <input type="text" class="form-control" id="scriptDescription" placeholder="Enter description">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">SQL Script</label>
+                        <textarea id="sqlEditor"></textarea>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <button class="btn btn-primary me-2" id="btnExecute">Execute</button>
+                            <button class="btn btn-success me-2" id="btnSave">Save</button>
+                        </div>
+                        <div>
+                            <button class="btn btn-danger" id="btnDelete" style="display: none;">Delete</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="result-container" id="resultContainer" style="display: none;">
+                    <h5>Results</h5>
+                    <div id="resultContent">
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="resultTable">
+                                <thead id="resultTableHead"></thead>
+                                <tbody id="resultTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for messages -->
+    <div class="modal fade" id="messageModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Message content -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/sql/sql.min.js"></script>
+    <script>
+        // Initialize variables
+        let currentScriptId = null;
+        const messageModal = new bootstrap.Modal(document.getElementById('messageModal'));
+        
+        // Initialize CodeMirror
+        const sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
+            mode: 'text/x-sql',
+            theme: 'monokai',
+            lineNumbers: true,
+            indentWithTabs: true,
+            smartIndent: true,
+            lineWrapping: true,
+            matchBrackets: true,
+            autofocus: true
+        });        // Load all scripts when the page loads
+        window.onload = function() {
+            loadScripts();
+            
+            // Check for preloaded query from index page
+            const preloadedQuery = localStorage.getItem('preloadedQuery');
+            if (preloadedQuery) {
+                sqlEditor.setValue(preloadedQuery);
+                localStorage.removeItem('preloadedQuery'); // Clear after loading
+            }
+            
+            // Check for preload table parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const preloadTable = urlParams.get('preloadTable');
+            if (preloadTable) {
+                document.getElementById('scriptName').value = `${preloadTable} Query`;
+            }
+        };
+
+        // Function to load all saved scripts
+        function loadScripts() {
+            fetch('/scripts/')
+                .then(response => response.json())
+                .then(scripts => {
+                    const scriptsList = document.getElementById('scriptsList');
+                    scriptsList.innerHTML = '';
+                    
+                    if (scripts.length === 0) {
+                        scriptsList.innerHTML = '<div class="list-group-item">No scripts found</div>';
+                        return;
+                    }
+                    
+                    scripts.forEach(script => {
+                        const scriptItem = document.createElement('button');
+                        scriptItem.className = 'list-group-item list-group-item-action';
+                        scriptItem.textContent = script.name;
+                        scriptItem.onclick = () => loadScript(script.id);
+                        scriptsList.appendChild(scriptItem);
+                    });
+                })
+                .catch(error => showMessage('Error', 'Failed to load scripts: ' + error.message));
+        }
+
+        // Function to load a specific script
+        function loadScript(scriptId) {
+            fetch(`/scripts/${scriptId}`)
+                .then(response => response.json())
+                .then(script => {
+                    currentScriptId = script.id;
+                    document.getElementById('scriptName').value = script.name;
+                    document.getElementById('scriptDescription').value = script.description || '';
+                    sqlEditor.setValue(script.content);
+                    document.getElementById('btnDelete').style.display = 'block';
+                })
+                .catch(error => showMessage('Error', 'Failed to load script: ' + error.message));
+        }
+
+        // Function to execute SQL script
+        document.getElementById('btnExecute').addEventListener('click', function() {
+            const scriptContent = sqlEditor.getValue();
+            
+            if (!scriptContent.trim()) {
+                showMessage('Warning', 'Please enter an SQL script to execute.');
+                return;
+            }
+            
+            // Show loading indicator
+            document.getElementById('resultContainer').style.display = 'block';
+            document.getElementById('resultContent').innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+              // Send request to execute script
+            fetch('/scripts/execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ script_content: scriptContent })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.detail || 'Server error');
+                    }).catch(e => {
+                        // If parsing JSON fails, use the status text
+                        throw new Error(response.statusText || 'Server error');
+                    });
+                }
+                return response.json();
+            })
+            .then(result => {
+                console.log('Execution result:', result);
+                displayResults(result);
+            })
+            .catch(error => {
+                console.error('Execution error:', error);
+                const errorMsg = error.message || 'Unknown error occurred';
+                showMessage('Error', 'Failed to execute script: ' + errorMsg);
+                
+                // Also update the result container with the error
+                document.getElementById('resultContainer').style.display = 'block';
+                document.getElementById('resultContent').innerHTML = 
+                    `<div class="alert alert-danger">Error executing script: ${errorMsg}</div>`;
+            });
+        });
+
+        // Function to save script
+        document.getElementById('btnSave').addEventListener('click', function() {
+            const name = document.getElementById('scriptName').value;
+            const description = document.getElementById('scriptDescription').value;
+            const content = sqlEditor.getValue();
+            
+            if (!name.trim()) {
+                showMessage('Warning', 'Please enter a name for the script.');
+                return;
+            }
+            
+            if (!content.trim()) {
+                showMessage('Warning', 'Please enter an SQL script to save.');
+                return;
+            }
+            
+            const scriptData = {
+                name: name,
+                description: description,
+                content: content
+            };
+            
+            const method = currentScriptId ? 'PUT' : 'POST';
+            const url = currentScriptId ? `/scripts/${currentScriptId}` : '/scripts/';
+            
+            fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(scriptData)
+            })
+            .then(response => response.json())
+            .then(script => {
+                currentScriptId = script.id;
+                document.getElementById('btnDelete').style.display = 'block';
+                showMessage('Success', `Script ${currentScriptId ? 'updated' : 'saved'} successfully!`);
+                loadScripts();
+            })
+            .catch(error => showMessage('Error', `Failed to ${currentScriptId ? 'update' : 'save'} script: ` + error.message));
+        });
+
+        // Function to delete script
+        document.getElementById('btnDelete').addEventListener('click', function() {
+            if (!currentScriptId) {
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to delete this script?')) {
+                return;
+            }
+            
+            fetch(`/scripts/${currentScriptId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(result => {
+                showMessage('Success', 'Script deleted successfully!');
+                resetEditor();
+                loadScripts();
+            })
+            .catch(error => showMessage('Error', 'Failed to delete script: ' + error.message));
+        });
+
+        // Function to create a new script
+        document.getElementById('btnNewScript').addEventListener('click', function() {
+            resetEditor();
+        });
+
+        // Function to reset the editor
+        function resetEditor() {
+            currentScriptId = null;
+            document.getElementById('scriptName').value = '';
+            document.getElementById('scriptDescription').value = '';
+            sqlEditor.setValue('');
+            document.getElementById('btnDelete').style.display = 'none';
+            document.getElementById('resultContainer').style.display = 'none';
+        }        // Function to display results of SQL execution
+        function displayResults(result) {
+            const resultContainer = document.getElementById('resultContainer');
+            const resultContent = document.getElementById('resultContent');
+            resultContainer.style.display = 'block';
+            
+            // Helper function to escape HTML special characters
+            function escapeHtml(unsafe) {
+                if (unsafe === null) return 'NULL';
+                if (unsafe === undefined) return '';
+                return String(unsafe)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+            
+            if (result.message) {
+                if (result.data && result.data.length > 0) {
+                    // Build HTML for the table directly
+                    let tableHTML = '<div class="alert alert-success mb-3">' + escapeHtml(result.message) + ' (' + result.count + ' rows)</div>';
+                    tableHTML += '<div class="table-responsive"><table class="table table-striped"><thead><tr>';
+                    
+                    // Add headers
+                    Object.keys(result.data[0]).forEach(key => {
+                        tableHTML += '<th>' + escapeHtml(key) + '</th>';
+                    });
+                    
+                    tableHTML += '</tr></thead><tbody>';
+                    
+                    // Add data rows
+                    result.data.forEach(row => {
+                        tableHTML += '<tr>';
+                        Object.values(row).forEach(value => {
+                            tableHTML += '<td>' + escapeHtml(value) + '</td>';
+                        });
+                        tableHTML += '</tr>';
+                    });
+                    
+                    tableHTML += '</tbody></table></div>';
+                    
+                    // Set the HTML all at once
+                    resultContent.innerHTML = tableHTML;
+                } else {
+                    // Show message for non-query statements
+                    resultContent.innerHTML = '<div class="alert alert-success">' + escapeHtml(result.message) + 
+                        (result.affected_rows !== undefined ? ' (' + escapeHtml(result.affected_rows) + ' rows affected)' : '') + 
+                        '</div>';
+                }
+            } else {
+                resultContent.innerHTML = '<div class="alert alert-warning">No results returned</div>';
+            }
+        }
+
+        // Function to show message modal
+        function showMessage(title, message) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalBody').textContent = message;
+            messageModal.show();
+        }
+    </script>
+</body>
+</html>
