@@ -3,7 +3,11 @@ from sqlalchemy.orm import Session
 from app.database import metadata, engine
 from app import models
 from app.schemas import SQLScriptCreate
-from typing import List
+from typing import List, Dict, Any
+import json
+from datetime import datetime, date
+from decimal import Decimal
+import re
 
 def get_table_names(db: Session):
     """Get all tables in the database"""
@@ -144,6 +148,63 @@ def _process_result_row(row: tuple, column_names: List[str]) -> Dict[str, Any]:
         row_dict[column] = _format_value_for_json(row[idx])
     return row_dict
 
+def _check_and_modify_table_structure(script_content: str):
+    """Check if the script creates a table in STG schema and ensure it has the required structure"""
+    import re
+    create_table_pattern = r"CREATE\s+(?:TEMPORARY\s+)?TABLE\s+(?:STG\.)?(\w+)"
+    match = re.search(create_table_pattern, script_content, re.IGNORECASE)
+    
+    if not match:
+        return script_content, None
+    
+    # Get the table name
+    table_name = match.group(1)
+    
+    # Required columns definition
+    required_columns = """
+    rule_id varchar(20),
+    source_id varchar(20),
+    source_uid varchar(500),
+    data_value varchar(2000),
+    txn_date date
+    """
+    
+    # If there's no clear column definition, ensure the structure
+    if "rule_id" not in script_content and "source_id" not in script_content:
+        # Modify script to include required columns
+        script_content = re.sub(
+            r"(CREATE\s+(?:TEMPORARY\s+)?TABLE\s+(?:STG\.)?(\w+))(\s*\()?",
+            r"\1 (\n" + required_columns + "\n",
+            script_content,
+            flags=re.IGNORECASE
+        )
+    
+    return script_content, table_name
+
+class TableStructureValidationError(ValueError):
+    """Exception raised when table structure validation fails."""
+    pass
+
+def _validate_table_structure(db: Session, table_name: str):
+    """Validate that a table has the required structure"""
+    # Check if table has the required columns
+    val_sql = text("""
+    SELECT COUNT(*) as column_count
+    FROM information_schema.columns 
+    WHERE table_schema = 'STG' 
+    AND table_name = :table_name
+    AND column_name IN ('rule_id', 'source_id', 'source_uid', 'data_value', 'txn_date')
+    """)
+    
+    validation_result = db.execute(val_sql, {"table_name": table_name}).scalar()
+    
+    if validation_result != 5:
+        raise TableStructureValidationError(
+            "Table structure validation failed. Required columns: "
+            "rule_id varchar(20), source_id varchar(20), source_uid varchar(500), "
+            "data_value varchar(2000), txn_date date"
+        )
+
 def execute_sql_script(db: Session, script_content: str) -> dict:
     """Execute a SQL script and return results"""
     if not script_content or not script_content.strip():
@@ -153,7 +214,10 @@ def execute_sql_script(db: Session, script_content: str) -> dict:
     script_content = script_content.strip()
     if script_content.endswith(';'):
         script_content = script_content[:-1]
-        
+    
+    # Check and modify table structure if needed
+    script_content, table_name = _check_and_modify_table_structure(script_content)
+    
     # Use text() to create a textual SQL statement
     sql = text(script_content)
     
@@ -177,13 +241,25 @@ def execute_sql_script(db: Session, script_content: str) -> dict:
         else:
             # For statements that don't return results (INSERT, UPDATE, etc.)
             db.commit()
+            
+            # If we detected a CREATE TABLE, validate its structure
+            if table_name:
+                try:
+                    _validate_table_structure(db, table_name)
+                except TableStructureValidationError as v_err:
+                    db.rollback()
+                    raise TableStructureValidationError(f"Table structure validation error: {str(v_err)}")
+            
             return {
                 "message": "Statement executed successfully",
                 "affected_rows": result.rowcount,
                 "data": []
             }
+    except TableStructureValidationError:
+        # Re-raise the validation error
+        raise
     except Exception as e:
         # Roll back on error
         db.rollback()
         print(f"SQL execution error details: {str(e)}")
-        raise Exception(f"SQL Error: {str(e)}")
+        raise ValueError(f"SQL Error: {str(e)}")
