@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import metadata, engine
 from app import models
 from app.schemas import SQLScriptCreate
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from datetime import datetime, date
 from decimal import Decimal
@@ -205,61 +205,88 @@ def _validate_table_structure(db: Session, table_name: str):
             "data_value varchar(2000), txn_date date"
         )
 
+def _handle_ddl_dml(db: Session, sql: Any, table_name_to_validate_stg: Optional[str]) -> Dict[str, Any]:
+    """Handles DDL/DML operations with transaction management and STG validation."""
+    with db.begin_nested() if db.in_transaction() else db.begin() as trans:
+        try:
+            result = db.execute(sql)
+            # If table_name_to_validate_stg is provided, it means an STG table was created and needs validation.
+            if table_name_to_validate_stg:
+                _validate_table_structure(db, table_name_to_validate_stg)
+            trans.commit()
+            return {
+                "message": "Statement executed successfully",
+                "affected_rows": result.rowcount if hasattr(result, 'rowcount') else 0,
+                "data": []
+            }
+        except Exception as e:
+            trans.rollback()
+            print(f"SQL Error (transaction rolled back): {str(e)}")
+            raise # Re-raise to be caught by the main function
+
+def _handle_select(db: Session, sql: Any) -> Dict[str, Any]:
+    """Handles SELECT queries."""
+    result = db.execute(sql)
+    if result.returns_rows:
+        column_names = result.keys()
+        rows = result.fetchall()
+        data = [_process_result_row(row, column_names) for row in rows]
+        return {
+            "data": data,
+            "count": len(data),
+            "message": "Query executed successfully"
+        }
+    else:
+        return {"message": "Query executed, no rows returned", 
+                "affected_rows": result.rowcount if hasattr(result, 'rowcount') else 0, 
+                "data": []}
+
 def execute_sql_script(db: Session, script_content: str) -> dict:
     """Execute a SQL script and return results"""
     if not script_content or not script_content.strip():
         return {"message": "Empty query", "data": [], "count": 0}
+
+    print(f"Executing SQL script: {script_content[:200]}...")
+
+    processed_script_content = script_content.strip()
+    if processed_script_content.endswith(';'):
+        processed_script_content = processed_script_content[:-1]
+
+    table_name_for_stg_validation = None
+    # Check if it's an STG table creation operation
+    is_stg_create_op = "CREATE " in processed_script_content.upper() and \
+                       " STG." in processed_script_content.upper()
+
+    if is_stg_create_op:
+        # Modify script for STG table and get table name for validation
+        processed_script_content, table_name_for_stg_validation = \
+            _check_and_modify_table_structure(processed_script_content)
     
-    # Strip trailing semicolons which might cause issues
-    script_content = script_content.strip()
-    if script_content.endswith(';'):
-        script_content = script_content[:-1]
-    
-    # Check and modify table structure if needed
-    script_content, table_name = _check_and_modify_table_structure(script_content)
-    
-    # Use text() to create a textual SQL statement
-    sql = text(script_content)
-    
+    sql = text(processed_script_content)
+    # Determine if DDL/DML based on the potentially modified script
+    is_ddl_dml = any(keyword in processed_script_content.upper() for keyword in 
+                     ["INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP"])
+
     try:
-        # Execute the SQL statement
-        result = db.execute(sql)
-        
-        # Check if this is a SELECT query that returns rows
-        if result.returns_rows:
-            column_names = result.keys()
-            rows = result.fetchall()
-            
-            # Process rows using helper function
-            data = [_process_result_row(row, column_names) for row in rows]
-            
-            return {
-                "data": data,
-                "count": len(data),
-                "message": "Query executed successfully"
-            }
+        if is_ddl_dml:
+            # Pass only the table name for STG validation if applicable
+            return _handle_ddl_dml(db, sql, table_name_for_stg_validation)
         else:
-            # For statements that don't return results (INSERT, UPDATE, etc.)
-            db.commit()
-            
-            # If we detected a CREATE TABLE, validate its structure
-            if table_name:
-                try:
-                    _validate_table_structure(db, table_name)
-                except TableStructureValidationError as v_err:
-                    db.rollback()
-                    raise TableStructureValidationError(f"Table structure validation error: {str(v_err)}")
-            
-            return {
-                "message": "Statement executed successfully",
-                "affected_rows": result.rowcount,
-                "data": []
-            }
-    except TableStructureValidationError:
-        # Re-raise the validation error
-        raise
+            return _handle_select(db, sql)
+    except TableStructureValidationError as ve:
+        print(f"Table Structure Validation Error: {str(ve)}")
+        # Rollback should be handled by _handle_ddl_dml if the error originated there
+        # or if an outer transaction exists, it might need handling here or by the caller.
+        # For simplicity, assuming _handle_ddl_dml's rollback is sufficient for its scope.
+        raise # Re-raise to be handled by the route
     except Exception as e:
-        # Roll back on error
-        db.rollback()
-        print(f"SQL execution error details: {str(e)}")
-        raise ValueError(f"SQL Error: {str(e)}")
+        import traceback
+        print(f"SQL Execution Error: {str(e)}")
+        print(traceback.format_exc())
+        # Similar to above, rollback handling is tricky for exceptions outside _handle_ddl_dml's transaction.
+        # If db.begin() was called implicitly by execute, it might not auto-rollback on Python exception.
+        # However, _handle_ddl_dml has its own explicit rollback.
+        # For errors in _handle_select or before _handle_ddl_dml's transaction starts,
+        # an explicit db.rollback() here might be needed if a session-level transaction was initiated by FastAPI's Depends(get_db).
+        # For now, relying on the route's exception handler and _handle_ddl_dml's internal rollback.
+        raise ValueError(f"SQL Error: {str(e)}") # Raise a ValueError for the route to catch
