@@ -195,7 +195,7 @@ def _parse_create_table_statement(script_content: str) -> Optional[Dict[str, Any
     """Parses a CREATE TABLE statement into its components."""
     import re
     pattern = re.compile(
-        r"(CREATE\\s+(TEMPORARY\\s+)?)(TABLE\\s+)(IF\\s+NOT\\s+EXISTS\\s+)?(STG\\.)?(\\w+)(.*)", # Use \\w for table name part
+        r"(CREATE\s+(TEMPORARY\s+)?)(TABLE\s+)(IF\s+NOT\s+EXISTS\s+)?(STG\.)?(\w+)(.*)", # Fixed escape characters
         re.IGNORECASE | re.DOTALL
     )
     match = pattern.match(script_content.strip())
@@ -268,7 +268,7 @@ def _inject_stg_columns(parsed_info: Dict[str, Any], ddl_table_name_part: str) -
 
     elif " as " in rest_of_statement.lower() or not rest_of_statement or rest_of_statement == ";":
         import re
-        as_clause_match = re.search(r"(\\s+AS\\s+.*)", rest_of_statement, re.IGNORECASE | re.DOTALL)
+        as_clause_match = re.search(r"(\s+AS\s+.*)", rest_of_statement, re.IGNORECASE | re.DOTALL) # Fixed escape characters
         if as_clause_match:
             as_part = as_clause_match.group(1)
             return f"{create_kw_full}{table_keyword}{if_not_exists_kw}{ddl_table_name_part} ({stg_columns_sql}){as_part}"
