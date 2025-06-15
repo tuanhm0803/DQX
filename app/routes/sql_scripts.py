@@ -59,6 +59,11 @@ def execute_script(request: SQLExecuteRequest = Body(...), db: Session = Depends
         # Add debug logging
         print(f"Executing script: {request.script_content[:100]}...")
         result = crud.execute_sql_script(db, request.script_content)
+        
+        # Handle error from CREATE TABLE prevention
+        if result.get("error") is True:
+            raise HTTPException(status_code=403, detail=result["message"])
+            
         return result
     except TableStructureValidationError as e:
         print(f"Table structure validation error: {str(e)}")
@@ -66,6 +71,9 @@ def execute_script(request: SQLExecuteRequest = Body(...), db: Session = Depends
             status_code=400, 
             detail=f"Table Structure Error: {str(e)}. All tables in STG schema must have exactly these columns: rule_id varchar(20), source_id varchar(20), source_uid varchar(500), data_value varchar(2000), txn_date date"
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already properly formatted
+        raise
     except Exception as e:
         print(f"Script execution error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Execution failed: {str(e)}")

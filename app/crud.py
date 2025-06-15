@@ -373,17 +373,13 @@ def execute_sql_script(db: Session, script_content: str) -> dict:
     processed_script_content = script_content.strip()
     # Trailing semicolons are generally fine for PostgreSQL with text(), so no need to strip aggressively.
 
+    # Prevent CREATE TABLE statements for security reasons
+    if "CREATE " in processed_script_content.upper() and "TABLE " in processed_script_content.upper():
+        return {"message": "CREATE TABLE statements are not allowed for security reasons", 
+                "data": [], "count": 0, "error": True}
+    
     table_name_for_stg_validation = None
     is_temporary_stg_candidate = False
-    
-    if "CREATE " in processed_script_content.upper() and "TABLE " in processed_script_content.upper():
-        modified_script, stg_base_table_name, is_temp = _check_and_modify_table_structure(processed_script_content)
-        if stg_base_table_name: 
-            if modified_script != processed_script_content:
-                 print(f"Script modified for STG compliance. New: {modified_script[:200]}...")
-            processed_script_content = modified_script
-            table_name_for_stg_validation = stg_base_table_name
-            is_temporary_stg_candidate = is_temp
             
     sql = text(processed_script_content)
     
