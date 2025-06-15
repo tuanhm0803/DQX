@@ -3,12 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
-from .database import engine
-from .models import Base
 from .routes import tables, query, sql_scripts
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 # FastAPI app
 app = FastAPI(title="Database Explorer API")

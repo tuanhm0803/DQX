@@ -1,21 +1,31 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.sql import func
-from app.database import Base
+from typing import Optional
+from datetime import datetime
 
 # Sample model - you can expand this with your actual models
-class ExampleTable(Base):
-    __tablename__ = "example_table"
+class ExampleTable:
+    id: int
+    name: str
+    description: Optional[str]
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    description = Column(String, index=True)
+    def __init__(self, name: str, description: Optional[str] = None, id: Optional[int] = None):
+        self.id = id
+        self.name = name
+        self.description = description
 
-class SQLScript(Base):
-    __tablename__ = "sql_scripts"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), index=True, nullable=False)
-    description = Column(Text, nullable=True)
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+class SQLScript:
+    # Placeholder if other parts of your application expect this class
+    # This is NOT an ORM model anymore
+    id: int
+    name: str
+    description: Optional[str]
+    content: str
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    def __init__(self, name: str, content: str, description: Optional[str] = None, id: Optional[int] = None, created_at: Optional[datetime] = None, updated_at: Optional[datetime] = None):
+        self.id = id
+        self.name = name
+        self.description = description
+        self.content = content
+        self.created_at = created_at
+        self.updated_at = updated_at

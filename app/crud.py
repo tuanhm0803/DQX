@@ -1,113 +1,11 @@
-from sqlalchemy import Table, inspect, text
-from sqlalchemy.orm import Session
-from app.database import metadata, engine
-from app import models
-from app.schemas import SQLScriptCreate
-from typing import List, Dict, Any, Optional
+import psycopg2
+from psycopg2.extensions import connection as PgConnection # For type hinting
+from psycopg2 import sql # For safe SQL construction
 import json
 from datetime import datetime, date
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
 import re
-
-def get_table_names(db: Session):
-    """Get all tables in the database"""
-    inspector = inspect(engine)
-    return inspector.get_table_names()
-
-def get_table_structure(table_name: str, db: Session):
-    """Get the structure of a specific table"""
-    inspector = inspect(engine)
-    return {"columns": inspector.get_columns(table_name)}
-
-def get_table_data(table_name: str, skip: int, limit: int, db: Session):
-    """Get data from a specific table with pagination"""
-    # Dynamically create table object
-    table = Table(table_name, metadata, autoload_with=engine)
-    
-    # Execute query
-    result = db.execute(table.select().offset(skip).limit(limit)).fetchall()
-    
-    # Convert to list of dicts
-    data = []
-    for row in result:
-        data.append({column.name: value for column, value in zip(table.columns, row)})
-    
-    return {"data": data, "total": db.execute(table.select().count()).scalar(), "skip": skip, "limit": limit}
-
-def insert_table_data(table_name: str, data: dict, db: Session):
-    """Insert data into a specific table"""
-    table = Table(table_name, metadata, autoload_with=engine)
-    result = db.execute(table.insert().values(**data))
-    db.commit()
-    return {"success": True, "id": result.inserted_primary_key}
-
-def update_table_data(table_name: str, record_id: int, data: dict, id_column: str, db: Session):
-    """Update data in a specific table by ID"""
-    table = Table(table_name, metadata, autoload_with=engine)
-    result = db.execute(
-        table.update()
-        .where(table.c[id_column] == record_id)
-        .values(**data)
-    )
-    db.commit()
-    return {"success": True, "updated_rows": result.rowcount}
-
-def delete_table_data(table_name: str, record_id: int, id_column: str, db: Session):
-    """Delete data from a specific table by ID"""
-    table = Table(table_name, metadata, autoload_with=engine)
-    result = db.execute(
-        table.delete().where(table.c[id_column] == record_id)
-    )
-    db.commit()
-    return {"success": True, "deleted_rows": result.rowcount}
-
-def execute_query(query: str, db: Session):
-    """Execute a custom SQL query"""
-    result = db.execute(query).fetchall()
-    column_names = db.execute(query).keys()
-    data = [dict(zip(column_names, row)) for row in result]
-    return {"data": data, "count": len(data)}
-
-def get_sql_scripts(db: Session) -> List[models.SQLScript]:
-    """Get all SQL scripts"""
-    return db.query(models.SQLScript).all()
-
-def get_sql_script(db: Session, script_id: int) -> models.SQLScript:
-    """Get a specific SQL script by ID"""
-    return db.query(models.SQLScript).filter(models.SQLScript.id == script_id).first()
-
-def create_sql_script(db: Session, script: SQLScriptCreate) -> models.SQLScript:
-    """Create a new SQL script"""
-    db_script = models.SQLScript(
-        name=script.name,
-        description=script.description,
-        content=script.content
-    )
-    db.add(db_script)
-    db.commit()
-    db.refresh(db_script)
-    return db_script
-
-def update_sql_script(db: Session, script_id: int, script: SQLScriptCreate) -> models.SQLScript:
-    """Update an existing SQL script"""
-    db_script = db.query(models.SQLScript).filter(models.SQLScript.id == script_id).first()
-    db_script.name = script.name
-    db_script.description = script.description
-    db_script.content = script.content
-    db.commit()
-    db.refresh(db_script)
-    return db_script
-
-def delete_sql_script(db: Session, script_id: int) -> None:
-    """Delete a SQL script"""
-    db_script = db.query(models.SQLScript).filter(models.SQLScript.id == script_id).first()
-    db.delete(db_script)
-    db.commit()
-
-import json
-from datetime import datetime, date
-from decimal import Decimal
-from typing import Any, Dict, List
 
 # Custom JSON encoder to handle special data types
 class JSONEncoder(json.JSONEncoder):
@@ -117,293 +15,365 @@ class JSONEncoder(json.JSONEncoder):
         if isinstance(obj, Decimal):
             return float(obj)
         if isinstance(obj, bytes):
-            return obj.hex()
-        return json.JSONEncoder.default(self, obj)
+            return obj.hex() # More standard way to represent bytes
+        return super().default(obj)
 
 def _format_value_for_json(value: Any) -> Any:
     """Format a database value for JSON serialization"""
     if value is None:
         return None
-        
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     elif isinstance(value, Decimal):
         return float(value)
     elif isinstance(value, (bytes, bytearray)):
-        return value.hex()
-        
-    # Handle more complex data types
-    try:
-        # Verify JSON serialization works
-        json.dumps(value, cls=JSONEncoder)
-        return value
-    except (TypeError, OverflowError):
-        # If not serializable, convert to string
-        return str(value)
+        try:
+            return value.decode('utf-8') # Try to decode if it's text
+        except UnicodeDecodeError:
+            return value.hex() # Fallback to hex if not valid UTF-8
+    # For other types, attempt to return as is, relying on JSONEncoder for complex ones
+    return value
 
 def _process_result_row(row: tuple, column_names: List[str]) -> Dict[str, Any]:
     """Process a single row of SQL query results"""
-    row_dict = {}
-    for idx, column in enumerate(column_names):
-        row_dict[column] = _format_value_for_json(row[idx])
-    return row_dict
+    return {col_name: _format_value_for_json(row_val) for col_name, row_val in zip(column_names, row)}
 
 class TableStructureValidationError(ValueError):
     """Exception raised when table structure validation fails."""
     pass
 
-def _validate_table_structure(db: Session, table_name: str, is_temporary: bool):
-    """Validate that a table has the required structure, accounting for temporary tables."""
-    # 'table_name' here is the base name.
-    # 'is_temporary' refers to the SQL TEMPORARY keyword.
-    
-    schema_to_check = None
-    if is_temporary:
-        # For true SQL TEMPORARY tables, they reside in a pg_temp_X schema.
-        # We need to find if ANY such temp table with that name has the columns.
-        # This assumes the table name is unique across temp schemas for the session,
-        # or we are checking the one created by the current session.
-        val_sql = text("""
-        SELECT COUNT(c.column_name)
-        FROM information_schema.columns c
-        JOIN information_schema.tables t ON c.table_name = t.table_name AND c.table_schema = t.table_schema
-        WHERE t.table_name = :table_name
-          AND t.table_schema LIKE 'pg_temp_%' 
-          AND c.column_name IN ('rule_id', 'source_id', 'source_uid', 'data_value', 'txn_date')
-        """)
-        validation_result = db.execute(val_sql, {"table_name": table_name}).scalar_one_or_none() or 0
-        schema_to_check = "pg_temp_%"
-    else: # Permanent table, should be in STG schema for this validation path
-        val_sql = text("""
-        SELECT COUNT(*) as column_count
-        FROM information_schema.columns 
-        WHERE table_schema = 'STG' 
-          AND table_name = :table_name
-          AND column_name IN ('rule_id', 'source_id', 'source_uid', 'data_value', 'txn_date')
-        """)
-        validation_result = db.execute(val_sql, {"table_name": table_name}).scalar_one_or_none() or 0
-        schema_to_check = "STG"
-    
-    if validation_result != 5:
-        raise TableStructureValidationError(
-            f"Table '{table_name}' in schema context '{schema_to_check}' (SQL TEMPORARY: {is_temporary}) "
-            "structure validation failed. Required columns: rule_id, source_id, source_uid, data_value, txn_date. "
-            f"Found {validation_result} matching columns."
+def get_table_names(db: PgConnection) -> List[str]:
+    """Get all tables in the 'DQ' schema using the provided DB connection"""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'dq';")
+        tables = [row[0] for row in cursor.fetchall()]
+        return tables
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[tuple]]:
+    """Get the structure of a specific table using the provided DB connection"""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # Use normal string, not f-string, when using %s placeholders
+        cursor.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = %s AND table_schema = 'dq';", (table_name,))
+        columns = cursor.fetchall()
+        return {"columns": columns}
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_table_data(table_name: str, skip: int, limit: int, db: PgConnection) -> Dict[str, Any]:
+    """Get data from a specific table with pagination using the provided DB connection"""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        
+        # Get column names first
+        # Use normal string, not f-string, when using %s placeholders
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = %s AND table_schema = 'dq' ORDER BY ordinal_position;", (table_name,))
+        column_names_result = cursor.fetchall()
+        if not column_names_result:
+            raise ValueError(f"Table '{table_name}' not found or has no columns in schema 'dq'.")
+        column_names = [row[0] for row in column_names_result]
+
+        # Fetch data
+        query = sql.SQL("SELECT {fields} FROM {schema}.{table} LIMIT %s OFFSET %s;").format(
+            fields=sql.SQL(',').join(map(sql.Identifier, column_names)),
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier(table_name)
         )
-
-def _parse_create_table_statement(script_content: str) -> Optional[Dict[str, Any]]:
-    """Parses a CREATE TABLE statement into its components."""
-    import re
-    pattern = re.compile(
-        r"(CREATE\s+(TEMPORARY\s+)?)(TABLE\s+)(IF\s+NOT\s+EXISTS\s+)?(STG\.)?(\w+)(.*)", # Fixed escape characters
-        re.IGNORECASE | re.DOTALL
-    )
-    match = pattern.match(script_content.strip())
-    if not match:
-        return None
-    
-    return {
-        "full_match": match.group(0),
-        "create_kw_full": match.group(1),
-        "is_temporary_kw": match.group(2),
-        "table_keyword": match.group(3),
-        "if_not_exists_kw": match.group(4) or "",
-        "current_schema_prefix": match.group(5) or "",
-        "base_table_name": match.group(6),
-        "rest_of_statement": match.group(7).strip()
-    }
-
-def _determine_column_injection_necessity(parsed_info: Dict[str, Any]) -> bool:
-    """Determines if STG columns need to be injected."""
-    rest_of_statement = parsed_info["rest_of_statement"]
-    script_lower_for_col_check = rest_of_statement.lower()
-    cols_defined_in_script = False
-
-    if rest_of_statement.startswith("("):
-        paren_level = 0
-        col_def_content = ""
-        for i, char_code in enumerate(rest_of_statement):
-            if i == 0: continue
-            if char_code == '(': paren_level +=1
-            elif char_code == ')':
-                if paren_level == 0:
-                    col_def_content = rest_of_statement[1:i]
-                    break
-                paren_level -=1
-        if col_def_content.strip():
-            cols_defined_in_script = True
-            script_lower_for_col_check = col_def_content.lower()
-            
-    if " as " in rest_of_statement.lower() and not cols_defined_in_script:
-         script_lower_for_col_check = "" # Force column addition
-
-    return "rule_id" not in script_lower_for_col_check or "source_id" not in script_lower_for_col_check
-
-def _inject_stg_columns(parsed_info: Dict[str, Any], ddl_table_name_part: str) -> str:
-    """Injects STG columns into the CREATE TABLE statement."""
-    stg_columns_sql = "rule_id VARCHAR(20), source_id VARCHAR(20), source_uid VARCHAR(500), data_value VARCHAR(2000), txn_date DATE"
-    
-    create_kw_full = parsed_info["create_kw_full"]
-    table_keyword = parsed_info["table_keyword"]
-    if_not_exists_kw = parsed_info["if_not_exists_kw"]
-    rest_of_statement = parsed_info["rest_of_statement"]
-
-    if rest_of_statement.startswith("("):
-        paren_level = 0
-        col_def_end_idx = -1
-        for idx, char_code in enumerate(rest_of_statement):
-            if char_code == '(': paren_level +=1
-            elif char_code == ')': 
-                paren_level -=1
-                if paren_level == 0 and idx > 0:
-                    col_def_end_idx = idx
-                    break
+        cursor.execute(query, (limit, skip))
+        result = cursor.fetchall()
         
-        if col_def_end_idx != -1:
-            existing_cols_content = rest_of_statement[1:col_def_end_idx].strip()
-            after_col_defs = rest_of_statement[col_def_end_idx+1:].strip()
-            new_columns_part = f"({stg_columns_sql}, {existing_cols_content})" if existing_cols_content else f"({stg_columns_sql})"
-            return f"{create_kw_full}{table_keyword}{if_not_exists_kw}{ddl_table_name_part} {new_columns_part} {after_col_defs}"
-        return parsed_info["full_match"] # Malformed, return original
-
-    elif " as " in rest_of_statement.lower() or not rest_of_statement or rest_of_statement == ";":
-        import re
-        as_clause_match = re.search(r"(\s+AS\s+.*)", rest_of_statement, re.IGNORECASE | re.DOTALL) # Fixed escape characters
-        if as_clause_match:
-            as_part = as_clause_match.group(1)
-            return f"{create_kw_full}{table_keyword}{if_not_exists_kw}{ddl_table_name_part} ({stg_columns_sql}){as_part}"
-        else:
-            ending = ";" if rest_of_statement.endswith(";") else ""
-            return f"{create_kw_full}{table_keyword}{if_not_exists_kw}{ddl_table_name_part} ({stg_columns_sql}){ending}"
-    
-    return parsed_info["full_match"] # Unknown structure, return original
-
-def _check_and_modify_table_structure(script_content: str) -> tuple[str, Optional[str], bool]:
-    """
-    Processes CREATE TABLE statements.
-    If a table is explicitly defined in 'STG' schema (e.g., CREATE TABLE STG.foo),
-    it ensures the table has the required 5 STG columns.
-    Returns: (modified_script_content, base_table_name_for_stg_validation, is_sql_temporary_keyword_used)
-    - base_table_name_for_stg_validation: The base name if it's an STG candidate, else None.
-    - is_sql_temporary_keyword_used: True if SQL 'TEMPORARY' keyword was in the DDL.
-    """
-    parsed_info = _parse_create_table_statement(script_content)
-    if not parsed_info:
-        return script_content, None, False # Not a CREATE TABLE or parse failed
-
-    is_sql_temporary_keyword_used = bool(parsed_info["is_temporary_kw"])
-    # Check if 'STG.' was literally in the CREATE TABLE statement for the table name.
-    is_explicitly_stg_schema = parsed_info["current_schema_prefix"].upper() == "STG."
-    base_table_name = parsed_info["base_table_name"]
-
-    stg_base_name_for_validation = None
-    final_script_content = script_content # Default to original
-
-    if is_explicitly_stg_schema:
-        # This table is an STG candidate because it's explicitly STG.foo or STG.bar
-        stg_base_name_for_validation = base_table_name
+        data = [_process_result_row(row, column_names) for row in result]
         
-        # The ddl_table_name_part for injection must include the STG. prefix
-        # as _inject_stg_columns reconstructs using this.
-        # parsed_info["current_schema_prefix"] will be "STG." or "stg."
-        ddl_name_for_injection = parsed_info["current_schema_prefix"] + base_table_name
+        # Get total count for pagination
+        count_query = sql.SQL("SELECT COUNT(*) FROM {schema}.{table};").format(
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier(table_name)
+        )
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()[0]
+        
+        return {"data": data, "total": total_count, "skip": skip, "limit": limit}
+    finally:
+        if cursor:
+            cursor.close()
 
-        if _determine_column_injection_necessity(parsed_info): # parsed_info contains original "rest_of_statement"
-            final_script_content = _inject_stg_columns(parsed_info, ddl_name_for_injection)
-        # No 'else if needs_reconstruction_for_name' is needed here because if is_explicitly_stg_schema,
-        # the name in DDL already includes "STG.", so no reconstruction for name part itself, only for columns.
-    # else: Not an explicit STG schema table (e.g. CREATE TABLE foo, CREATE TEMPORARY TABLE bar).
-    # These are not STG candidates for column modification according to the new rule.
-    # So, no modifications, and stg_base_name_for_validation remains None.
-
-    return final_script_content, stg_base_name_for_validation, is_sql_temporary_keyword_used
-
-def _handle_ddl_dml(db: Session, sql: Any, table_name_to_validate: Optional[str], is_sql_temporary_table: bool) -> Dict[str, Any]:
-    """Handles DDL/DML operations with transaction management and STG validation."""
-    active_transaction = db.in_transaction()
-    if not active_transaction:
-        db.begin()
-
+def insert_table_data(table_name: str, data: Dict[str, Any], db: PgConnection) -> Dict[str, Any]:
+    """Insert data into a specific table using the provided DB connection"""
+    cursor = None
     try:
-        result = db.execute(sql)
-        # 'table_name_to_validate' is the base name of an explicit STG table.
-        # 'is_sql_temporary_table' indicates if TEMPORARY keyword was used for it.
-        if table_name_to_validate: # This means it was an explicit STG table
-            _validate_table_structure(db, table_name_to_validate, is_sql_temporary_table)
+        cursor = db.cursor()
         
-        if not active_transaction:
-            db.commit()
-        # else: outer transaction handles commit/rollback
+        columns = list(data.keys()) # Ensure columns is a list for consistent ordering
+        values = [data[column] for column in columns]
+        
+        # Check if 'id' column exists for RETURNING clause
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = %s AND column_name = 'id' AND table_schema = 'dq';", (table_name,))
+        id_column_exists = cursor.fetchone()
 
-        return {
-            "message": "Statement executed successfully",
-            "affected_rows": result.rowcount if result and hasattr(result, 'rowcount') else 0,
-            "data": []
-        }
-    except Exception as e:
-        if not active_transaction:
+        returning_sql = sql.SQL(" RETURNING id") if id_column_exists else sql.SQL("")
+
+        query = sql.SQL("INSERT INTO {schema}.{table} ({cols}) VALUES ({vals}){returning}").format(
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier(table_name),
+            cols=sql.SQL(',').join(map(sql.Identifier, columns)),
+            vals=sql.SQL(',').join(sql.Placeholder() * len(values)),
+            returning=returning_sql
+        )
+        
+        cursor.execute(query, values)
+        inserted_id = None
+        if id_column_exists and cursor.rowcount > 0 and cursor.description: # Check description before fetchone
+            inserted_id = cursor.fetchone()[0]
+        
+        db.commit()
+        return {"success": True, "id": inserted_id, "inserted_rows": cursor.rowcount}
+    except Exception:
+        if db:
             db.rollback()
-        print(f"SQL Error (transaction status: {'rolled back by this handler' if not active_transaction else 'outer transaction active'}): {str(e)}")
-        raise
+        raise # Re-raise the caught exception
+    finally:
+        if cursor:
+            cursor.close()
 
-def _handle_select(db: Session, sql: Any) -> Dict[str, Any]:
-    """Handles SELECT queries."""
-    result = db.execute(sql)
-    if result.returns_rows:
-        column_names = result.keys()
-        rows = result.fetchall()
-        data = [_process_result_row(row, column_names) for row in rows]
-        return {
-            "data": data,
-            "count": len(data),
-            "message": "Query executed successfully"
-        }
-    else:
-        return {"message": "Query executed, no rows returned", 
-                "affected_rows": result.rowcount if hasattr(result, 'rowcount') else 0, 
-                "data": []}
-
-def execute_sql_script(db: Session, script_content: str) -> dict:
-    """Execute a SQL script and return results"""
-    if not script_content or not script_content.strip():
-        return {"message": "Empty query", "data": [], "count": 0}
-
-    print(f"Original SQL script: {script_content[:200]}...")
-
-    processed_script_content = script_content.strip()
-    # Trailing semicolons are generally fine for PostgreSQL with text(), so no need to strip aggressively.
-
-    # Prevent CREATE TABLE statements for security reasons
-    if "CREATE " in processed_script_content.upper() and "TABLE " in processed_script_content.upper():
-        return {"message": "CREATE TABLE statements are not allowed for security reasons", 
-                "data": [], "count": 0, "error": True}
-    
-    table_name_for_stg_validation = None
-    is_temporary_stg_candidate = False
-            
-    sql = text(processed_script_content)
-    
-    # Determine if DDL/DML based on keywords in the potentially modified script
-    # This check could be more sophisticated (e.g., using SQLAlchemy's SQL parser if available/performant)
-    is_ddl_dml = any(keyword in processed_script_content.upper() for keyword in 
-                     ["INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "TRUNCATE"])
-
+def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_column: str, db: PgConnection) -> Dict[str, Any]:
+    """Update data in a specific table by ID using the provided DB connection"""
+    cursor = None
     try:
-        if is_ddl_dml:
-            return _handle_ddl_dml(db, sql, table_name_for_stg_validation, is_temporary_stg_candidate)
-        else: # Assumed SELECT
-            return _handle_select(db, sql)
-    except TableStructureValidationError as ve:
-        print(f"Table Structure Validation Error: {str(ve)}")
-        # The transaction in _handle_ddl_dml should have rolled back.
-        raise 
+        cursor = db.cursor()
+        
+        set_clause_parts = []
+        values = []
+        for column, value in data.items():
+            set_clause_parts.append(sql.SQL("{} = %s").format(sql.Identifier(column)))
+            values.append(value)
+        values.append(record_id) # Add record_id for the WHERE clause
+        
+        query = sql.SQL("UPDATE {schema}.{table} SET {set_parts} WHERE {id_col} = %s;").format(
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier(table_name),
+            set_parts=sql.SQL(', ').join(set_clause_parts),
+            id_col=sql.Identifier(id_column)
+        )
+        
+        cursor.execute(query, values)
+        updated_rows = cursor.rowcount
+        db.commit()
+        return {"success": True, "updated_rows": updated_rows}
+    except Exception:
+        if db:
+            db.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+
+def delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgConnection) -> Dict[str, Any]:
+    """Delete data from a specific table by ID using the provided DB connection"""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = sql.SQL("DELETE FROM {schema}.{table} WHERE {id_col} = %s;").format(
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier(table_name),
+            id_col=sql.Identifier(id_column)
+        )
+        cursor.execute(query, (record_id,))
+        deleted_rows = cursor.rowcount
+        db.commit()
+        return {"success": True, "deleted_rows": deleted_rows}
+    except Exception:
+        if db:
+            db.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+
+def execute_query(query_string: str, db: PgConnection) -> Dict[str, Any]:
+    """Execute a custom SQL query (assumed SELECT) using the provided DB connection"""
+    cursor = None
+    if not query_string.strip().lower().startswith("select"):
+        raise ValueError("Only SELECT queries are allowed for execute_query.")
+    try:
+        cursor = db.cursor()
+        cursor.execute(query_string)
+        
+        if cursor.description: 
+            column_names = [desc[0] for desc in cursor.description]
+            result = cursor.fetchall()
+            data = [_process_result_row(row, column_names) for row in result]
+            return {"data": data, "count": len(data), "columns": column_names}
+        else: 
+            return {"message": "Query executed successfully.", "rowcount": cursor.rowcount}
+
+    except Exception:
+        # SELECT queries don't typically need rollback unless part of a larger transaction
+        # that might have been started implicitly by FastAPI/Starlette.
+        # However, get_db now yields the connection, so rollback might be handled by the caller or context.
+        # For safety, if an error occurs during SELECT, a rollback won't hurt.
+        if db:
+             db.rollback() # Added rollback for consistency, though SELECTs are usually read-only.
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+
+# --- SQL Script Management Functions ---
+def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # Added 'description' to the SELECT query
+        cursor.execute("SELECT id, name, description, content, created_at, updated_at FROM dq.dq_sql_scripts ORDER BY created_at DESC;")
+        scripts = cursor.fetchall()
+        if not scripts: return []
+        column_names = [desc[0] for desc in cursor.description]
+        return [_process_result_row(script, column_names) for script in scripts]
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]:
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # Added 'description' to the SELECT query
+        cursor.execute("SELECT id, name, description, content, created_at, updated_at FROM dq.dq_sql_scripts WHERE id = %s;", (script_id,))
+        script = cursor.fetchone()
+        if script:
+            column_names = [desc[0] for desc in cursor.description]
+            return _process_result_row(script, column_names)
+        return None
+    finally:
+        if cursor:
+            cursor.close()
+
+def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]: # script_data comes from SQLScriptCreate model
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # Added 'description' to INSERT and VALUES
+        # script_data.get('description') will be None if not provided, which is fine for an optional, nullable column
+        query = """
+            INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
+            VALUES (%s, %s, %s, NOW(), NOW())
+            RETURNING id, name, description, content, created_at, updated_at;
+        """
+        cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content']))
+        new_script = cursor.fetchone()
+        db.commit()
+        if not new_script: 
+             raise ValueError("Failed to create script or retrieve returned values.")
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(new_script, column_names)
+    except Exception:
+        if db: db.rollback()
+        raise
+    finally:
+        if cursor: cursor.close()
+
+def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # Added 'description' to SET clause
+        query = """
+            UPDATE dq.dq_sql_scripts
+            SET name = %s, description = %s, content = %s, updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, name, description, content, created_at, updated_at;
+        """
+        cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content'], script_id))
+        updated_script = cursor.fetchone()
+        db.commit()
+        if updated_script:
+            column_names = [desc[0] for desc in cursor.description]
+            return _process_result_row(updated_script, column_names)
+        return None 
+    except Exception:
+        if db: db.rollback()
+        raise
+    finally:
+        if cursor: cursor.close()
+
+def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
+    cursor = None
+    try:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM dq.dq_sql_scripts WHERE id = %s;", (script_id,))
+        deleted_rows = cursor.rowcount
+        db.commit()
+        if deleted_rows == 0:
+            return {"success": False, "message": "Script not found or already deleted.", "deleted_rows": 0}
+        return {"success": True, "deleted_rows": deleted_rows}
+    except Exception:
+        if db: db.rollback()
+        raise
+    finally:
+        if cursor: cursor.close()
+
+def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
+    """
+    Executes the provided SQL script content.
+    This function needs to be carefully designed to prevent harmful operations.
+    """
+    # Placeholder for any validation logic (e.g., TableStructureValidationError)
+    # if "CREATE TABLE" in script_content.upper() and "STG." in script_content.upper():
+    #     raise TableStructureValidationError("Creation of tables in STG schema with specific structure is required.")
+
+    cursor = None
+    try:
+        cursor = db.cursor()
+        # psycopg2 executes the entire string, which can include multiple statements
+        # separated by semicolons if the server is configured to allow it,
+        # or if it's a single complex statement.
+        # However, cursor.description and fetchall() will typically relate to the *last*
+        # command that produces results if multiple statements are executed.
+        # For more complex multi-statement scripts, consider splitting or using a library.
+        cursor.execute(script_content)
+        
+        results = []
+        columns = []
+
+        # Check if the last executed part of the script returned data
+        if cursor.description: 
+            columns = [desc[0] for desc in cursor.description]
+            fetched_rows = cursor.fetchall()
+            for row in fetched_rows:
+                results.append(_process_result_row(row, columns))
+        
+        # Commit if the script likely contained DML (not just SELECT)
+        # This is a heuristic. A more robust way is to parse the script or rely on explicit transaction control.
+        script_lower_trimmed = script_content.strip().lower()
+        if not script_lower_trimmed.startswith("select") and "returning" not in script_lower_trimmed :
+             # If it's not a select, and not a DML with RETURNING (which commits implicitly sometimes or is handled by autocommit)
+             # then explicitly commit. This is broad; ideally, the script itself or the calling context handles transactions.
+             # For now, we commit if it's not clearly a read-only operation.
+            if cursor.rowcount > 0 or any(kw in script_lower_trimmed for kw in ["insert", "update", "delete", "create", "alter", "drop", "truncate"]):
+                 db.commit()
+            
+        return {
+            "message": "Script executed successfully.", 
+            "rowcount": cursor.rowcount, 
+            "columns": columns, 
+            "data": results      
+        }
+
+    except psycopg2.Error as db_err:
+        if db: db.rollback()
+        # Re-raise as a ValueError to be caught by the route handler, which will convert to HTTPException
+        raise ValueError(f"Database error: {db_err.pgcode if db_err.pgcode else ''} - {db_err.pgerror if db_err.pgerror else str(db_err)}") from db_err
     except Exception as e:
-        import traceback
-        print(f"SQL Execution Error: {str(e)}")
-        print(traceback.format_exc())
-        # If an error occurs outside _handle_ddl_dml's explicit transaction (e.g., in _handle_select, or before)
-        # and if FastAPI's get_db created a transaction, that might need a rollback.
-        # However, typical FastAPI setup with `yield db; db.close()` doesn't auto-rollback on exceptions within the route.
-        # The safest is to ensure _handle_ddl_dml handles its own, and SELECTs are read-only.
-        # Re-raising a generic ValueError for the route.
-        raise ValueError(f"SQL Error: {str(e)}")
+        if db: db.rollback()
+        raise ValueError(f"Execution failed: {str(e)}") from e
+    finally:
+        if cursor:
+            cursor.close()

@@ -65,11 +65,11 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="mb-4">SQL Script Editor</h1>
-        
+        <h1 class="mb-4">SQL Editor & Script Management</h1>
+
         <div class="row">
-            <!-- Left Column: Script List -->
-            <div class="col-md-3">
+            <!-- Unified Block: Script List and Editor -->
+            <div class="col-md-4">
                 <div class="script-list mb-3">
                     <h5>Saved Scripts</h5>
                     <div class="list-group" id="scriptsList">
@@ -80,9 +80,8 @@
                     <button class="btn btn-primary" id="btnNewScript">New Script</button>
                 </div>
             </div>
-            
-            <!-- Right Column: Editor and Results -->
-            <div class="col-md-9">
+
+            <div class="col-md-8">
                 <div class="editor-container">
                     <div class="mb-3">
                         <label for="scriptName" class="form-label">Script Name</label>
@@ -93,7 +92,7 @@
                         <input type="text" class="form-control" id="scriptDescription" placeholder="Enter description">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">SQL Script</label>
+                        <label for="sqlEditor" class="form-label">SQL Script</label>
                         <textarea id="sqlEditor"></textarea>
                     </div>
                     <div class="d-flex justify-content-between">
@@ -106,13 +105,18 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="result-container" id="resultContainer" style="display: none;">
                     <h5>Results</h5>
                     <div id="resultContent">
                         <div class="table-responsive">
                             <table class="table table-striped" id="resultTable">
-                                <thead id="resultTableHead"></thead>
+                                <thead>
+                                    <tr>
+                                        <th>Column Name</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
                                 <tbody id="resultTableBody"></tbody>
                             </table>
                         </div>
