@@ -21,14 +21,20 @@ class SQLExecuteRequest(BaseModel):
 
 
 @router.get("/", response_model=List[SQLScript])
-def get_scripts(db: PgConnection = Depends(get_db)):  # Changed type hint
+def get_scripts(db: PgConnection = Depends(get_db)):
     """Get all saved SQL scripts"""
     try:
-        return crud.get_sql_scripts(db)
+        scripts_list = crud.get_sql_scripts(db)
+        return scripts_list
     except psycopg2.Error as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve scripts: {str(e)}")
+        # Log e for server-side details
+        raise HTTPException(status_code=500, detail=f"Database error while retrieving scripts: {str(e)}")
+    except ValueError as ve: # Catch specific ValueErrors from CRUD, e.g., if table structure is unexpected
+        # Log ve for server-side details
+        raise HTTPException(status_code=500, detail=f"Error processing script data: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        # Log e for server-side details
+        raise HTTPException(status_code=500, detail="An unexpected server error occurred while retrieving scripts.")
 
 
 @router.get("/{script_id}", response_model=SQLScript)
@@ -48,16 +54,21 @@ def get_script(script_id: int, db: PgConnection = Depends(get_db)):  # Changed t
 
 
 @router.post("/", response_model=SQLScript)
-def create_script(script: SQLScriptCreate, db: PgConnection = Depends(get_db)):  # Changed type hint
+def create_script(script: SQLScriptCreate, db: PgConnection = Depends(get_db)):
     """Save a new SQL script"""
     try:
-        return crud.create_sql_script(db, script)
+        created_script_dict = crud.create_sql_script(db, script.model_dump())
+        return created_script_dict
     except psycopg2.Error as e:
-        db.rollback()  # Ensure rollback on error
-        raise HTTPException(status_code=400, detail=f"Failed to create script: {str(e)}")
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error while creating script: {str(e)}")
+    except ValueError as ve:  # Catch specific ValueErrors from CRUD
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise HTTPException(status_code=400, detail=f"Failed to create script: {str(ve)}")
     except Exception as e:
-        db.rollback()  # Ensure rollback on error
-        raise HTTPException(status_code=400, detail=f"An unexpected error occurred: {str(e)}")
+        if db and not getattr(db, 'closed', True): db.rollback()
+        # Consider logging the full exception e here for server-side debugging
+        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while creating script.")
 
 
 @router.put("/{script_id}", response_model=SQLScript)
@@ -67,15 +78,25 @@ def update_script(script_id: int, script: SQLScriptCreate, db: PgConnection = De
         existing_script = crud.get_sql_script(db, script_id)  # Check existence first
         if existing_script is None:
             raise HTTPException(status_code=404, detail=SCRIPT_NOT_FOUND)
-        return crud.update_sql_script(db, script_id, script)
+        # Pass the model as a dictionary, excluding unset values for partial updates
+        # For PUT, typically all fields are required, or it's a full replacement.
+        # If partial update is desired, PATCH is more appropriate, or model_dump(exclude_unset=True) for PUT.
+        # Assuming SQLScriptCreate contains all necessary fields for an update.
+        updated_script_dict = crud.update_sql_script(db, script_id, script.model_dump())
+        if updated_script_dict is None:  # crud.update_sql_script returns Optional
+            raise HTTPException(status_code=404, detail="Update failed or script not found after update attempt.")
+        return updated_script_dict
     except psycopg2.Error as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Failed to update script {script_id}: {str(e)}")
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error while updating script {script_id}: {str(e)}")
+    except ValueError as ve:  # Catch specific ValueErrors from CRUD
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise HTTPException(status_code=400, detail=f"Failed to update script {script_id}: {str(ve)}")
     except HTTPException:  # Re-raise if it's already an HTTPException (like 404)
         raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"An unexpected error occurred: {str(e)}")
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while updating script {script_id}.")
 
 
 @router.delete("/{script_id}")

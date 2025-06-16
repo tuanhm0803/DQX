@@ -2,7 +2,7 @@
 
 ## Overview
 
-DQX is a FastAPI application designed to provide a web-based interface for interacting with a PostgreSQL database using `psycopg2`. It allows users to browse tables, view table structures, query data, and manage SQL scripts. A key feature is its handling of tables within an 'STG' (staging) schema, where it enforces a specific 5-column structure for any table created in this schema.
+DQX is a FastAPI application designed to provide a web-based interface for interacting with a PostgreSQL database using `psycopg2`. It allows users to browse tables, view table structures, query data, and manage SQL scripts. The application has been refactored from an initial SQLAlchemy-based approach to use `psycopg2` for all direct database interactions, enhancing control over SQL execution and simplifying the database layer.
 
 ## Project Structure
 
@@ -45,11 +45,11 @@ DQX/
 *   **Key Components/Functions**:
     *   `load_dotenv()`: Loads environment variables from a `.env` file (e.g., `DATABASE_URL`).
     *   `DATABASE_URL = os.getenv(...)`: Retrieves the database connection string for `psycopg2`.
-    *   `get_db()`: A dependency function used by FastAPI. It creates and yields a new `psycopg2` database connection for each incoming request and ensures the connection is closed after the request is processed.
+    *   `get_db()`: A dependency function used by FastAPI. It creates and yields a new `psycopg2` database connection for each incoming request and ensures the connection is closed after the request is processed. This replaces the previous SQLAlchemy session management.
 
 ### 3. `app/models.py`
 
-*   **Purpose**: This module previously contained SQLAlchemy ORM (Object Relational Mapper) models. After refactoring to `psycopg2`, it no longer defines ORM models. Database table definitions (like `dq.dq_sql_scripts`) are now managed directly via SQL DDL statements (e.g., executed manually or through migration scripts). Pydantic models in `app/schemas.py` are used for data validation and serialization related to API interactions.
+*   **Purpose**: This module previously contained SQLAlchemy ORM (Object Relational Mapper) models. After refactoring to `psycopg2`, it no longer defines ORM models. Database table definitions (like `dq.dq_sql_scripts`) are now managed directly via SQL DDL statements (e.g., executed manually or through migration scripts if implemented separately). The classes remaining in `models.py` (e.g., `ExampleTable`, `SQLScript`) serve as Pydantic-like plain Python objects for internal data representation if needed, but are not tied to the database schema in an ORM fashion. Pydantic models in `app/schemas.py` are the primary source for data validation and serialization related to API interactions.
 
 ### 4. `app/schemas.py`
 
@@ -65,29 +65,13 @@ DQX/
 
 ### 5. `app/crud.py`
 
-*   **Purpose**: Contains the core logic for database operations (Create, Read, Update, Delete - CRUD). This module interacts directly with the database using `psycopg2`.
+*   **Purpose**: Contains the core logic for database operations (Create, Read, Update, Delete - CRUD). This module interacts directly with the database using `psycopg2` and its `sql` module for safe dynamic SQL query construction.
 *   **Key Functions**:
-    *   `get_table_names(db: PgConnection)`: Retrieves a list of all table names in the 'dq' schema using `psycopg2`.
-    *   `get_table_structure(table_name: str, db: PgConnection)`: Fetches the column definitions (name, type, etc.) for a specified table in the 'dq' schema using `psycopg2`.
-    *   `get_table_data(table_name: str, skip: int, limit: int, db: PgConnection)`: Retrieves rows from a table in the 'dq' schema with pagination support using `psycopg2`.
-    *   `insert_table_data(table_name: str, data: dict, db: PgConnection)`: Inserts a new row into the specified table in the 'dq' schema using `psycopg2`.
-    *   `update_table_data(table_name: str, record_id: Any, data: dict, id_column: str, db: PgConnection)`: Updates an existing row in a table in the 'dq' schema, identified by `record_id` in the specified `id_column`, using `psycopg2`.
-    *   `delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgConnection)`: Deletes a row from a table in the 'dq' schema by its ID using `psycopg2`.
-    *   `execute_query(query_string: str, db: PgConnection)`: Executes a raw SQL `SELECT` query using `psycopg2` and returns the results.
-    *   `get_sql_scripts(db: PgConnection)`: Retrieves all saved SQL scripts from the `dq.dq_sql_scripts` table using `psycopg2`.
-    *   `get_sql_script(db: PgConnection, script_id: int)`: Fetches a single SQL script by its `id` from `dq.dq_sql_scripts` using `psycopg2`.
-    *   `create_sql_script(db: PgConnection, script_data: SQLScriptCreate)`: Creates a new SQL script record in the `dq.dq_sql_scripts` table using `psycopg2`.
-    *   `update_sql_script(db: PgConnection, script_id: int, script_data: SQLScriptCreate)`: Updates an existing SQL script in `dq.dq_sql_scripts` using `psycopg2`.
-    *   `delete_sql_script(db: PgConnection, script_id: int)`: Deletes an SQL script from `dq.dq_sql_scripts` using `psycopg2`.
-    *   `JSONEncoder(json.JSONEncoder)`: A custom JSON encoder to handle serialization of data types like `datetime`, `date`, `Decimal`, and `bytes` which are not natively handled by the default `json` library when processing `psycopg2` results.
-    *   `_format_value_for_json(value: Any)`: Helper function to prepare individual database values for JSON serialization.
-    *   `_process_result_row(row: tuple, column_names: List[str])`: Converts a database result row (tuple from `psycopg2`) into a dictionary with column names as keys and properly formatted values.
-    *   `TableStructureValidationError(ValueError)`: Custom exception class raised when a table created in the `STG` schema does not meet the required column structure.
-    *   The STG schema enforcement logic (previously involving `_validate_table_structure`, `_parse_create_table_statement`, etc.) is primarily encapsulated within `execute_sql_script`. This function inspects `CREATE TABLE` statements targeting the `STG` schema and may modify them or validate their structure post-execution using direct `psycopg2` operations.
-    *   `execute_sql_script(db: PgConnection, script_content: str)`: The main public function in `crud.py` for executing arbitrary SQL scripts using `psycopg2`.
-        *   It may parse and potentially modify `CREATE TABLE STG.*` statements to enforce column rules.
-        *   It executes the script, handling DDL/DML (with commits/rollbacks) and `SELECT` queries appropriately.
-        *   Catches `TableStructureValidationError` and other `psycopg2.Error` or `ValueError` exceptions, re-raising them to be handled by the API routes.
+    *   All CRUD functions (`get_table_names`, `get_table_structure`, `get_table_data`, `insert_table_data`, `update_table_data`, `delete_table_data`, `execute_query`, `get_sql_scripts`, `get_sql_script`, `create_sql_script`, `update_sql_script`, `delete_sql_script`, `execute_sql_script`) now accept a `psycopg2` connection object (`PgConnection`) as a parameter.
+    *   SQL queries are constructed using `psycopg2.sql` objects (e.g., `sql.SQL()`, `sql.Identifier()`, `sql.Placeholder()`) to prevent SQL injection vulnerabilities.
+    *   Transaction management (e.g., `db.commit()`, `db.rollback()`) is handled within each relevant CRUD function.
+    *   `JSONEncoder(json.JSONEncoder)` and helper functions `_format_value_for_json`, `_process_result_row` are used to convert `psycopg2` query results (tuples) into JSON-serializable dictionaries, handling various data types like `datetime`, `Decimal`, and `bytes`.
+    *   The STG schema enforcement logic (previously `_validate_table_structure`, etc.) has been removed as part of the simplification. The `execute_sql_script` function now directly executes the provided SQL content using `psycopg2`, with standard error handling for database operations. Any specific schema validation would need to be re-implemented if required.
 
 ## API Routes (`app/routes/`)
 
@@ -141,7 +125,7 @@ DQX/
 
 ## Key Design Considerations
 
-*   **STG Schema Enforcement**: A primary feature is the strict column structure imposed on tables created within the `STG` schema via the SQL execution endpoint. This is handled in `crud.py` using `psycopg2`.
-*   **Separation of Concerns**: The project is structured with separate modules for database logic (`database.py`), data schemas (`schemas.py`), business logic/CRUD operations (`crud.py`), and API routing (`routes/`).
-*   **Dependency Injection**: FastAPI's dependency injection (`Depends(get_db)`) is used to manage `psycopg2` database connections.
-*   **Error Handling**: HTTPExceptions are used in routes to return appropriate error responses. Custom exceptions like `TableStructureValidationError` are defined for specific business logic errors.
+*   **Database Interaction**: All database operations are now performed using `psycopg2` directly, offering fine-grained control over SQL and removing the SQLAlchemy ORM layer.
+*   **SQL Safety**: `psycopg2.sql` module is used for constructing SQL queries with dynamic identifiers and placeholders, mitigating SQL injection risks.
+*   **STG Schema Enforcement**: The previous complex logic for STG schema validation during `CREATE TABLE` has been removed. The `execute_sql_script` endpoint now executes scripts more directly. If specific structural enforcement for `STG` tables is needed, it would require a new implementation (e.g., parsing SQL or checking `information_schema` post-execution).
+*   **Separation of Concerns**: The project maintains a structure with separate modules for database connection (`database.py`), data schemas (`schemas.py`), CRUD operations (`crud.py`), and API routing (`routes/`).

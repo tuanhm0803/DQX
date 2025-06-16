@@ -231,12 +231,27 @@ def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
-        # Added 'description' to the SELECT query
         cursor.execute("SELECT id, name, description, content, created_at, updated_at FROM dq.dq_sql_scripts ORDER BY created_at DESC;")
-        scripts = cursor.fetchall()
-        if not scripts: return []
+        scripts_tuples = cursor.fetchall()
+        if not scripts_tuples:
+            return []
+        
+        if cursor.description is None:
+            raise ValueError("Failed to get column descriptions after fetching scripts.")
+            
         column_names = [desc[0] for desc in cursor.description]
-        return [_process_result_row(script, column_names) for script in scripts]
+        return [_process_result_row(script_tuple, column_names) for script_tuple in scripts_tuples]
+    except psycopg2.Error as db_err: # Catch database specific errors
+        # Log db_err details server-side
+        # Re-raise to be handled by the route, or wrap in a custom app exception
+        raise # Propagates the psycopg2.Error
+    except ValueError as val_err: # Catch ValueErrors like the one we added
+        # Log val_err details server-side
+        raise # Propagates the ValueError
+    except Exception as e:
+        # Log e details server-side
+        # Wrap unexpected errors in a standard exception type or re-raise carefully
+        raise RuntimeError(f"An unexpected error occurred in get_sql_scripts: {str(e)}") from e
     finally:
         if cursor:
             cursor.close()
@@ -245,64 +260,117 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
     cursor = None
     try:
         cursor = db.cursor()
-        # Added 'description' to the SELECT query
         cursor.execute("SELECT id, name, description, content, created_at, updated_at FROM dq.dq_sql_scripts WHERE id = %s;", (script_id,))
-        script = cursor.fetchone()
-        if script:
-            column_names = [desc[0] for desc in cursor.description]
-            return _process_result_row(script, column_names)
-        return None
+        script_tuple = cursor.fetchone()
+        if not script_tuple:
+            return None
+
+        if cursor.description is None:
+            raise ValueError(f"Failed to get column descriptions for script ID {script_id}.")
+
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(script_tuple, column_names)
+    except psycopg2.Error as db_err:
+        raise
+    except ValueError as val_err:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred in get_sql_script for ID {script_id}: {str(e)}") from e
     finally:
         if cursor:
             cursor.close()
 
-def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]: # script_data comes from SQLScriptCreate model
+def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
     cursor = None
     try:
         cursor = db.cursor()
-        # Added 'description' to INSERT and VALUES
-        # script_data.get('description') will be None if not provided, which is fine for an optional, nullable column
         query = """
             INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
             VALUES (%s, %s, %s, NOW(), NOW())
             RETURNING id, name, description, content, created_at, updated_at;
         """
         cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content']))
-        new_script = cursor.fetchone()
+        new_script_tuple = cursor.fetchone()
+
+        if not new_script_tuple:
+            if db and not getattr(db, 'closed', True): db.rollback() # Rollback as the insert didn't return.
+            raise ValueError("Insert operation did not return the new script. No script was created.")
+
+        # If we got here, RETURNING worked, so commit.
         db.commit()
-        if not new_script: 
-             raise ValueError("Failed to create script or retrieve returned values.")
+
+        if cursor.description is None:
+            # This is highly unlikely if new_script_tuple is not None, but as a safeguard:
+            raise ValueError("cursor.description is None after fetching a new script. Cannot determine column names.")
+
         column_names = [desc[0] for desc in cursor.description]
-        return _process_result_row(new_script, column_names)
-    except Exception:
-        if db: db.rollback()
+        return _process_result_row(new_script_tuple, column_names)
+
+    except KeyError as ke:
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise ValueError(f"Missing required script data: {str(ke)}") from ke
+    except psycopg2.Error: # Let psycopg2 errors propagate to be handled by the route
+        if db and not getattr(db, 'closed', True): db.rollback()
         raise
+    except ValueError: # If a ValueError is raised within try (like the ones above), rollback and re-raise
+        if db and not getattr(db, 'closed', True): db.rollback() # Ensure rollback if not already done
+        raise
+    except Exception as e: # Catch any other unexpected error
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise RuntimeError(f"An unexpected issue occurred in CRUD operation for create_sql_script: {str(e)}") from e
     finally:
-        if cursor: cursor.close()
+        if cursor:
+            cursor.close()
 
 def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
-        # Added 'description' to SET clause
+        # Using .get for name and content as well, in case model_dump(exclude_unset=True) was used by caller
+        # However, for a full update, these should ideally be present.
+        # The route currently passes script.model_dump() without exclude_unset=True for PUT.
+        name = script_data['name']
+        description = script_data.get('description')
+        content = script_data['content']
+
         query = """
             UPDATE dq.dq_sql_scripts
             SET name = %s, description = %s, content = %s, updated_at = NOW()
             WHERE id = %s
             RETURNING id, name, description, content, created_at, updated_at;
         """
-        cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content'], script_id))
-        updated_script = cursor.fetchone()
+        cursor.execute(query, (name, description, content, script_id))
+        updated_script_tuple = cursor.fetchone()
+
+        if not updated_script_tuple:
+            if db and not getattr(db, 'closed', True): db.rollback()
+            # Return None as per original signature, route will handle 404 if this means "not found"
+            # Or, could raise ValueError("Update operation did not return the script or script not found.")
+            return None 
+
         db.commit()
-        if updated_script:
-            column_names = [desc[0] for desc in cursor.description]
-            return _process_result_row(updated_script, column_names)
-        return None 
-    except Exception:
-        if db: db.rollback()
+
+        if cursor.description is None:
+             raise ValueError("cursor.description is None after fetching updated script. Cannot determine column names.")
+        
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(updated_script_tuple, column_names)
+    
+    except KeyError as ke:
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise ValueError(f"Missing required script data for update: {str(ke)}") from ke
+    except psycopg2.Error:
+        if db and not getattr(db, 'closed', True): db.rollback()
         raise
+    except ValueError: # If a ValueError is raised within try
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise
+    except Exception as e:
+        if db and not getattr(db, 'closed', True): db.rollback()
+        raise RuntimeError(f"An unexpected issue occurred in CRUD operation for update_sql_script: {str(e)}") from e
     finally:
-        if cursor: cursor.close()
+        if cursor:
+            cursor.close()
 
 def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
     cursor = None

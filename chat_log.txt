@@ -1,0 +1,20 @@
+Conversation Log - DQX Project Refactoring (June 2025)
+
+TASK DESCRIPTION:
+Refactor the DQX FastAPI project to use `psycopg2` instead of SQLAlchemy for all database interactions, ensure all endpoints and CRUD operations work with the new approach, resolve related errors, update documentation, and remove the "Secure Execution" feature from the homepage (`index.html`).
+
+SUMMARY OF ACTIONS AND RESOLUTIONS:
+- Refactored core backend files (`app/database.py`, `app/crud.py`, `app/routes/tables.py`, `app/routes/query.py`, `app/routes/sql_scripts.py`) to use `psycopg2` for all database operations.
+- Updated FastAPI dependency injection to yield a `psycopg2` connection and changed all route handler type hints accordingly.
+- Updated CRUD functions to accept a `psycopg2` connection and use safe SQL construction with `psycopg2.sql`.
+- Improved error handling and transaction management (commit/rollback) in all CRUD and route functions.
+- Ensured all SQL script management functions in `crud.py` align with the Pydantic model, including the optional `description` field.
+- Discussed and provided DDL for creating the required `dq.dq_sql_scripts` table in the database.
+- Updated `DOCUMENTATION.md` to reflect the migration from SQLAlchemy to `psycopg2` and the new backend architecture.
+- Staged, committed, and pushed initial code and documentation changes to the remote Git repository.
+- Investigated and explained the cause of the frontend error "scripts.forEach is not a function" (caused by backend returning an error object instead of an array due to missing table or schema mismatch).
+- Removed the "Secure Execution" feature/section from `app/static/index.html`.
+- Addressed "Unexpected token 'I', ... is not valid JSON" errors encountered during SQL script creation and loading. This involved:
+  - Ensuring Pydantic models are correctly converted to dictionaries (using `model_dump()`) before being passed to CRUD functions.
+  - Refining exception handling in `app/routes/sql_scripts.py` and `app/crud.py` to ensure JSON error responses are always sent from the API.
+  - Improving commit/rollback logic and adding validation (e.g., checking `cursor.description`) in CRUD operations for SQL scripts.
