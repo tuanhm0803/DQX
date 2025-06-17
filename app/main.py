@@ -1,12 +1,22 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import os
 from .routes import tables, query, sql_scripts
 
 # FastAPI app
 app = FastAPI(title="Database Explorer API")
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # In a production environment, you might want to log the exception
+    print(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"An internal server error occurred: {str(exc)}"},
+    )
 
 # CORS middleware
 app.add_middleware(

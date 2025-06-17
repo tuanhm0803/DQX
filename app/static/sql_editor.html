@@ -152,6 +152,27 @@
         let currentScriptId = null;
         const messageModal = new bootstrap.Modal(document.getElementById('messageModal'));
         
+        // Centralized response handler
+        async function handleResponse(response) {
+            if (response.ok) {
+                // If the response is a 204 No Content, we don't need to parse JSON
+                if (response.status === 204) {
+                    return null;
+                }
+                return response.json();
+            }
+            const errorText = await response.text();
+            try {
+                // Try to parse the error text as JSON, as our API should return JSON errors
+                const errorJson = JSON.parse(errorText);
+                throw new Error(errorJson.detail || 'An unknown server error occurred.');
+            } catch (e) {
+                // If it's not JSON, it might be an HTML error page. Show a snippet.
+                const snippet = errorText.substring(0, 300);
+                throw new Error(`Server returned a non-JSON response: ${snippet}`);
+            }
+        }
+
         // Initialize CodeMirror
         const sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
             mode: 'text/x-sql',
@@ -184,7 +205,7 @@
         // Function to load all saved scripts
         function loadScripts() {
             fetch('/scripts/')
-                .then(response => response.json())
+                .then(handleResponse)
                 .then(scripts => {
                     const scriptsList = document.getElementById('scriptsList');
                     scriptsList.innerHTML = '';
@@ -202,13 +223,16 @@
                         scriptsList.appendChild(scriptItem);
                     });
                 })
-                .catch(error => showMessage('Error', 'Failed to load scripts: ' + error.message));
+                .catch(error => {
+                    console.error('Failed to load scripts:', error);
+                    showMessage('Error', 'Failed to load scripts: ' + error.message)
+                });
         }
 
         // Function to load a specific script
         function loadScript(scriptId) {
             fetch(`/scripts/${scriptId}`)
-                .then(response => response.json())
+                .then(handleResponse)
                 .then(script => {
                     currentScriptId = script.id;
                     document.getElementById('scriptName').value = script.name;
@@ -239,17 +263,7 @@
                 },
                 body: JSON.stringify({ script_content: scriptContent })
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.detail || 'Server error');
-                    }).catch(e => {
-                        // If parsing JSON fails, use the status text
-                        throw new Error(response.statusText || 'Server error');
-                    });
-                }
-                return response.json();
-            })
+            .then(handleResponse)
             .then(result => {
                 console.log('Execution result:', result);
                 displayResults(result);
@@ -298,7 +312,7 @@
                 },
                 body: JSON.stringify(scriptData)
             })
-            .then(response => response.json())
+            .then(handleResponse)
             .then(script => {
                 currentScriptId = script.id;
                 document.getElementById('btnDelete').style.display = 'block';
@@ -321,7 +335,7 @@
             fetch(`/scripts/${currentScriptId}`, {
                 method: 'DELETE'
             })
-            .then(response => response.json())
+            .then(handleResponse)
             .then(result => {
                 showMessage('Success', 'Script deleted successfully!');
                 resetEditor();

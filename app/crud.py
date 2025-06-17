@@ -7,6 +7,68 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
 
+# --- SQL Script Validation ---
+
+REQUIRED_COLUMNS = {"rule_id", "source_id", "source_uid", "data_value", "txn_date"}
+
+def _validate_sql_script_columns(sql_content: str):
+    """
+    Validates that the SQL script is a SELECT statement and contains exactly the required columns.
+    Raises ValueError if validation fails.
+    """
+    sql_lower = sql_content.strip().lower()
+
+    if not sql_lower.startswith('select'):
+        raise ValueError("Invalid script. Only SELECT statements are allowed.")
+
+    # Use regex to extract the column part of the query (between SELECT and FROM)
+    match = re.search(r'select\s+(.*?)\s+from', sql_lower, re.DOTALL)
+    if not match:
+        raise ValueError("Invalid SELECT statement. Could not find column list.")
+
+    columns_str = match.group(1) # This is already lowercased
+    raw_column_parts = columns_str.split(',')
+    extracted_columns = set()
+
+    for part_str in raw_column_parts:
+        part_str = part_str.strip()
+        
+        # Regex to capture the alias if 'AS alias_name' pattern is used.
+        # It captures the expression before 'AS' and the alias_name itself.
+        # Alias name is restricted to simple identifiers for this validation.
+        alias_match = re.match(r'(.*)\s+as\s+([a-z0-9_]+)$', part_str, re.IGNORECASE)
+        
+        if alias_match:
+            # If an alias is found, use the alias name
+            column_name = alias_match.group(2).strip()
+        else:
+            # No 'AS alias_name' pattern found. 
+            # This means it's either a direct column name (e.g., rule_id) 
+            # or an expression without an alias (e.g., CURRENT_DATE).
+            # If it's an expression like CURRENT_DATE, it must be one of the REQUIRED_COLUMNS names itself,
+            # or it should have been aliased.
+            # For table.column or schema.table.column, take the last part.
+            if '.' in part_str:
+                column_name = part_str.split('.')[-1].strip()
+            else:
+                column_name = part_str.strip()
+        
+        # Remove any surrounding quotes from the final determined column name
+        # (though the alias regex `([a-z0-9_]+)` shouldn't capture quotes for the alias itself)
+        column_name = column_name.strip('\'\"`') # Corrected line
+        extracted_columns.add(column_name.lower()) # Add as lowercase
+
+    if extracted_columns != REQUIRED_COLUMNS:
+        missing = REQUIRED_COLUMNS - extracted_columns
+        extra = extracted_columns - REQUIRED_COLUMNS
+        error_parts = []
+        if missing:
+            error_parts.append(f"Missing required columns: {sorted(list(missing))}")
+        if extra:
+            error_parts.append(f"Disallowed columns found: {sorted(list(extra))}")
+        
+        raise ValueError(f"SQL script does not match required format. {'. '.join(error_parts)}")
+
 # Custom JSON encoder to handle special data types
 class JSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -228,29 +290,53 @@ def execute_query(query_string: str, db: PgConnection) -> Dict[str, Any]:
 
 # --- SQL Script Management Functions ---
 def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
+    """Get all saved SQL scripts from the database"""
     cursor = None
     try:
         cursor = db.cursor()
-        cursor.execute("SELECT id, name, description, content, created_at, updated_at FROM dq.dq_sql_scripts ORDER BY created_at DESC;")
-        scripts_tuples = cursor.fetchall()
-        if not scripts_tuples:
-            return []
+        # Added ORDER BY for consistent ordering and debugging
+        query = sql.SQL("SELECT id, name, description, content, created_at, updated_at FROM {}.{} ORDER BY id ASC").format(
+            sql.Identifier('dq'),
+            sql.Identifier('dq_sql_scripts')
+        )
+        cursor.execute(query)
         
-        if cursor.description is None:
-            raise ValueError("Failed to get column descriptions after fetching scripts.")
-            
+        fetched_rows = cursor.fetchall()
+        # Added for debugging to see what the database returns
+        print("Fetched rows from dq_sql_scripts:", fetched_rows) 
+
+        scripts = []
+        if not cursor.description:
+            return [] # Return empty list if no columns/data
+
         column_names = [desc[0] for desc in cursor.description]
-        return [_process_result_row(script_tuple, column_names) for script_tuple in scripts_tuples]
-    except psycopg2.Error as db_err: # Catch database specific errors
-        # Log db_err details server-side
-        # Re-raise to be handled by the route, or wrap in a custom app exception
-        raise # Propagates the psycopg2.Error
-    except ValueError as val_err: # Catch ValueErrors like the one we added
-        # Log val_err details server-side
-        raise # Propagates the ValueError
+        
+        if 'id' not in column_names:
+            raise ValueError("The 'id' column is missing from the dq_sql_scripts table.")
+
+        id_index = column_names.index('id')
+
+        for row in fetched_rows:
+            if row[id_index] is None:
+                print(f"Skipping script with NULL ID: {row}")
+                continue
+            
+            script_dict = {col: val for col, val in zip(column_names, row)}
+            
+            # Final check before appending to be extra safe
+            if 'id' not in script_dict or script_dict['id'] is None:
+                print(f"Skipping script with missing or NULL ID after processing: {script_dict}")
+                continue
+
+            scripts.append(script_dict)
+
+        return scripts
+
+    except psycopg2.Error as db_err:
+        raise ValueError(f"Database query failed: {str(db_err)}") from db_err
+    except ValueError as val_err:
+        raise val_err
     except Exception as e:
-        # Log e details server-side
-        # Wrap unexpected errors in a standard exception type or re-raise carefully
         raise RuntimeError(f"An unexpected error occurred in get_sql_scripts: {str(e)}") from e
     finally:
         if cursor:
@@ -270,9 +356,9 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
 
         column_names = [desc[0] for desc in cursor.description]
         return _process_result_row(script_tuple, column_names)
-    except psycopg2.Error as db_err:
+    except psycopg2.Error:
         raise
-    except ValueError as val_err:
+    except ValueError:
         raise
     except Exception as e:
         raise RuntimeError(f"An unexpected error occurred in get_sql_script for ID {script_id}: {str(e)}") from e
@@ -281,8 +367,12 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
             cursor.close()
 
 def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Creates a new SQL script in the database after validating its structure."""
     cursor = None
     try:
+        # Validate the script content before proceeding
+        _validate_sql_script_columns(script_data['content'])
+
         cursor = db.cursor()
         query = """
             INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
@@ -323,8 +413,12 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
             cursor.close()
 
 def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Updates an existing SQL script after validating its new content."""
     cursor = None
     try:
+        # Validate the new script content before proceeding
+        _validate_sql_script_columns(script_data['content'])
+
         cursor = db.cursor()
         # Using .get for name and content as well, in case model_dump(exclude_unset=True) was used by caller
         # However, for a full update, these should ideally be present.
@@ -390,12 +484,11 @@ def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
 
 def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
     """
-    Executes the provided SQL script content.
+    Executes the provided SQL script content after validating its structure.
     This function needs to be carefully designed to prevent harmful operations.
     """
-    # Placeholder for any validation logic (e.g., TableStructureValidationError)
-    # if "CREATE TABLE" in script_content.upper() and "STG." in script_content.upper():
-    #     raise TableStructureValidationError("Creation of tables in STG schema with specific structure is required.")
+    # First, validate the script structure and columns.
+    _validate_sql_script_columns(script_content)
 
     cursor = None
     try:

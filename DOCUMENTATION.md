@@ -71,6 +71,7 @@ DQX/
     *   SQL queries are constructed using `psycopg2.sql` objects (e.g., `sql.SQL()`, `sql.Identifier()`, `sql.Placeholder()`) to prevent SQL injection vulnerabilities.
     *   Transaction management (e.g., `db.commit()`, `db.rollback()`) is handled within each relevant CRUD function.
     *   `JSONEncoder(json.JSONEncoder)` and helper functions `_format_value_for_json`, `_process_result_row` are used to convert `psycopg2` query results (tuples) into JSON-serializable dictionaries, handling various data types like `datetime`, `Decimal`, and `bytes`.
+    *   `_validate_sql_script_columns(sql_content: str)`: A private helper function that validates SQL scripts. It ensures that scripts are `SELECT` statements and contain exactly the required columns: `rule_id`, `source_id`, `source_uid`, `data_value`, and `txn_date`. This validation is case-insensitive and supports column aliases (e.g., `SELECT column_alias AS rule_id, ...`). It is used by `create_sql_script`, `update_sql_script`, and `execute_sql_script` to enforce data structure consistency.
     *   The STG schema enforcement logic (previously `_validate_table_structure`, etc.) has been removed as part of the simplification. The `execute_sql_script` function now directly executes the provided SQL content using `psycopg2`, with standard error handling for database operations. Any specific schema validation would need to be re-implemented if required.
 
 ## API Routes (`app/routes/`)
@@ -109,8 +110,8 @@ DQX/
     *   `delete_script(script_id: int, db: PgConnection = Depends(get_db))`: Mapped to `DELETE /{script_id}`. Deletes an SQL script.
     *   `execute_script(request: SQLExecuteRequest = Body(...), db: PgConnection = Depends(get_db))`: Mapped to `POST /execute`.
         *   Executes the SQL script content provided in the request body.
-        *   Uses `crud.execute_sql_script`, subject to STG table column enforcement.
-        *   Handles `TableStructureValidationError` and other errors.
+        *   Uses `crud.execute_sql_script`, which internally calls `_validate_sql_script_columns` to ensure the script is a `SELECT` statement with the required columns (`rule_id`, `source_id`, `source_uid`, `data_value`, `txn_date`).
+        *   Handles `ValueError` (including from validation) and other database errors, returning appropriate HTTP responses.
 
 ## Frontend (`app/static/`)
 
@@ -127,5 +128,7 @@ DQX/
 
 *   **Database Interaction**: All database operations are now performed using `psycopg2` directly, offering fine-grained control over SQL and removing the SQLAlchemy ORM layer.
 *   **SQL Safety**: `psycopg2.sql` module is used for constructing SQL queries with dynamic identifiers and placeholders, mitigating SQL injection risks.
+*   **SQL Script Validation**: A strict validation (`_validate_sql_script_columns` in `crud.py`) is enforced for all saved and executed SQL scripts. They must be `SELECT` statements and output exactly five columns: `rule_id`, `source_id`, `source_uid`, `data_value`, and `txn_date`. This ensures data consistency for downstream processes.
 *   **STG Schema Enforcement**: The previous complex logic for STG schema validation during `CREATE TABLE` has been removed. The `execute_sql_script` endpoint now executes scripts more directly. If specific structural enforcement for `STG` tables is needed, it would require a new implementation (e.g., parsing SQL or checking `information_schema` post-execution).
 *   **Separation of Concerns**: The project maintains a structure with separate modules for database connection (`database.py`), data schemas (`schemas.py`), CRUD operations (`crud.py`), and API routing (`routes/`).
+*   **Error Handling**: Global exception handling in `main.py` ensures that all unhandled backend errors return a JSON response. Frontend JavaScript in `sql_editor.html` includes robust error handling for API calls.
