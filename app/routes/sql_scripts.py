@@ -68,7 +68,7 @@ def create_script(script: SQLScriptCreate, db: PgConnection = Depends(get_db)):
     except Exception as e:
         if db and not getattr(db, 'closed', True): db.rollback()
         # Consider logging the full exception e here for server-side debugging
-        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while creating script.")
+        raise HTTPException(status_code=500, detail="An unexpected server error occurred while creating script.")
 
 
 @router.put("/{script_id}", response_model=SQLScript)
@@ -148,6 +148,34 @@ def execute_script(request: SQLExecuteRequest = Body(...), db: PgConnection = De
     except HTTPException:  # Re-raise if it's already an HTTPException
         raise
     except Exception as e:  # Catch-all for other unexpected errors
-        # db.rollback() # Consider if a rollback is needed for generic exceptions
         print(f"Script execution unexpected error: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Execution failed: {str(e)}")
+        db.rollback()  # Rollback on any other error
+        raise HTTPException(status_code=400, detail=f"Script execution unexpected error: {str(e)}")
+
+
+@router.post("/{script_id}/populate_table")
+def populate_table(script_id: int, db: PgConnection = Depends(get_db)):
+    """Populate the staging table for a specific SQL script"""
+    try:
+        result = crud.populate_script_result_table(db, script_id)
+        return result
+    except psycopg2.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error while populating table for script {script_id}: {str(e)}")
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=f"Failed to populate table for script {script_id}: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while populating table for script {script_id}: {str(e)}")
+
+
+@router.post("/{script_id}/publish")
+def publish_results(script_id: int, db: PgConnection = Depends(get_db)):
+    """Publish results from the script's staging table to the main bad_detail table."""
+    try:
+        result = crud.publish_script_results(db, script_id)
+        return result
+    except psycopg2.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error while publishing results for script {script_id}: {str(e)}")
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=f"Failed to publish results for script {script_id}: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while publishing results for script {script_id}: {str(e)}")

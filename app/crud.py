@@ -7,6 +7,12 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
 
+# --- Helper for stg table management ---
+
+def _get_stg_table_name_str(script_id: int) -> str:
+    """Generates the string name for a script's staging table."""
+    return f"dq_script_{script_id}"
+
 # --- SQL Script Validation ---
 
 REQUIRED_COLUMNS = {"rule_id", "source_id", "source_uid", "data_value", "txn_date"}
@@ -16,17 +22,28 @@ def _validate_sql_script_columns(sql_content: str):
     Validates that the SQL script is a SELECT statement and contains exactly the required columns.
     Raises ValueError if validation fails.
     """
+    # Normalize the SQL content
     sql_lower = sql_content.strip().lower()
+    if sql_lower.endswith(';'):
+        sql_lower = sql_lower[:-1].strip()
 
     if not sql_lower.startswith('select'):
         raise ValueError("Invalid script. Only SELECT statements are allowed.")
 
-    # Use regex to extract the column part of the query (between SELECT and FROM)
-    match = re.search(r'select\s+(.*?)\s+from', sql_lower, re.DOTALL)
-    if not match:
+    # Find the end of the column list. This could be the start of a 'FROM' clause
+    # or the end of the query if no 'FROM' clause exists.
+    from_match = re.search(r'\s+from\s+', sql_lower, re.IGNORECASE)
+    
+    if from_match:
+        # If 'FROM' is found, columns are between 'SELECT' and 'FROM'
+        columns_str = sql_lower[len('select'):from_match.start()].strip()
+    else:
+        # If no 'FROM', columns are everything after 'SELECT'
+        columns_str = sql_lower[len('select'):].strip()
+
+    if not columns_str:
         raise ValueError("Invalid SELECT statement. Could not find column list.")
 
-    columns_str = match.group(1) # This is already lowercased
     raw_column_parts = columns_str.split(',')
     extracted_columns = set()
 
@@ -367,13 +384,25 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
             cursor.close()
 
 def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Creates a new SQL script in the database after validating its structure."""
+    """Creates a new SQL script and its corresponding staging table."""
     cursor = None
     try:
         # Validate the script content before proceeding
         _validate_sql_script_columns(script_data['content'])
 
         cursor = db.cursor()
+
+        # --- Check for existing script with the same name ---
+        script_name = script_data.get('name')
+        if not script_name:
+            raise ValueError("Script name cannot be empty.")
+        
+        cursor.execute("SELECT id FROM dq.dq_sql_scripts WHERE name = %s;", (script_name,))
+        if cursor.fetchone():
+            raise ValueError(f"A script with the name '{script_name}' already exists.")
+        # --- End of new logic ---
+
+        # Start transaction
         query = """
             INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
             VALUES (%s, %s, %s, NOW(), NOW())
@@ -383,34 +412,76 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
         new_script_tuple = cursor.fetchone()
 
         if not new_script_tuple:
-            if db and not getattr(db, 'closed', True): db.rollback() # Rollback as the insert didn't return.
+            if db and not getattr(db, 'closed', True): db.rollback()
             raise ValueError("Insert operation did not return the new script. No script was created.")
 
-        # If we got here, RETURNING worked, so commit.
-        db.commit()
-
         if cursor.description is None:
-            # This is highly unlikely if new_script_tuple is not None, but as a safeguard:
+            if db and not getattr(db, 'closed', True): db.rollback()
             raise ValueError("cursor.description is None after fetching a new script. Cannot determine column names.")
 
         column_names = [desc[0] for desc in cursor.description]
-        return _process_result_row(new_script_tuple, column_names)
+        
+        # Directly find the ID from the returned tuple to be more robust
+        try:
+            id_index = column_names.index('id')
+        except ValueError:
+            db.rollback()
+            raise ValueError("Fatal: 'id' column not found in RETURNING clause result.") from None
+
+        new_id = new_script_tuple[id_index]
+
+        if not new_id:
+            db.rollback()
+            # This is the most likely cause of the original error.
+            raise ValueError("Failed to retrieve ID for the newly created script (database returned NULL).")
+
+        # Now that we have a valid ID, we can process the rest of the data
+        new_script_dict = _process_result_row(new_script_tuple, column_names)
+
+        # --- Create the corresponding staging table ---
+        stg_table_name_str = _get_stg_table_name_str(new_id)
+        
+        # Drop if it somehow exists to ensure a clean slate
+        drop_table_query = sql.SQL("DROP TABLE IF EXISTS {schema}.{table};").format(
+            schema=sql.Identifier('stg'),
+            table=sql.Identifier(stg_table_name_str)
+        )
+        cursor.execute(drop_table_query)
+
+        # Sanitize script content for use in DDL
+        clean_script_content = script_data['content'].strip()
+        if clean_script_content.endswith(';'):
+            clean_script_content = clean_script_content[:-1]
+
+        # Create the table based on the script's output structure
+        create_table_query = sql.SQL("CREATE TABLE {schema}.{table} AS ({script_content}) WITH NO DATA;").format(
+            schema=sql.Identifier('stg'),
+            table=sql.Identifier(stg_table_name_str),
+            script_content=sql.SQL(clean_script_content)
+        )
+        cursor.execute(create_table_query)
+        # --- End of new logic ---
+
+        db.commit() # Commit both the insert and the create table
+
+        return new_script_dict
 
     except KeyError as ke:
         if db and not getattr(db, 'closed', True): db.rollback()
         raise ValueError(f"Missing required script data: {str(ke)}") from ke
-    except psycopg2.Error: # Let psycopg2 errors propagate to be handled by the route
+    except psycopg2.Error:
         if db and not getattr(db, 'closed', True): db.rollback()
         raise
-    except ValueError: # If a ValueError is raised within try (like the ones above), rollback and re-raise
-        if db and not getattr(db, 'closed', True): db.rollback() # Ensure rollback if not already done
+    except ValueError:
+        if db and not getattr(db, 'closed', True): db.rollback()
         raise
-    except Exception as e: # Catch any other unexpected error
+    except Exception as e:
         if db and not getattr(db, 'closed', True): db.rollback()
         raise RuntimeError(f"An unexpected issue occurred in CRUD operation for create_sql_script: {str(e)}") from e
     finally:
         if cursor:
             cursor.close()
+
 
 def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Updates an existing SQL script after validating its new content."""
@@ -424,6 +495,13 @@ def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, A
         # However, for a full update, these should ideally be present.
         # The route currently passes script.model_dump() without exclude_unset=True for PUT.
         name = script_data['name']
+
+        # --- Check if another script with the same name exists ---
+        cursor.execute("SELECT id FROM dq.dq_sql_scripts WHERE name = %s AND id != %s;", (name, script_id))
+        if cursor.fetchone():
+            raise ValueError(f"Another script with the name '{name}' already exists.")
+        # --- End of new logic ---
+        
         description = script_data.get('description')
         content = script_data['content']
 
@@ -470,9 +548,21 @@ def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
     cursor = None
     try:
         cursor = db.cursor()
+
+        # --- Drop the corresponding staging table ---
+        stg_table_name_str = _get_stg_table_name_str(script_id)
+        drop_table_query = sql.SQL("DROP TABLE IF EXISTS {schema}.{table};").format(
+            schema=sql.Identifier('stg'),
+            table=sql.Identifier(stg_table_name_str)
+        )
+        cursor.execute(drop_table_query)
+        # --- End of new logic ---
+
         cursor.execute("DELETE FROM dq.dq_sql_scripts WHERE id = %s;", (script_id,))
         deleted_rows = cursor.rowcount
-        db.commit()
+        
+        db.commit() # Commit both the drop and the delete
+        
         if deleted_rows == 0:
             return {"success": False, "message": "Script not found or already deleted.", "deleted_rows": 0}
         return {"success": True, "deleted_rows": deleted_rows}
@@ -481,6 +571,7 @@ def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
         raise
     finally:
         if cursor: cursor.close()
+
 
 def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
     """
@@ -538,3 +629,129 @@ def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
     finally:
         if cursor:
             cursor.close()
+
+# --- New function for populating stg table ---
+def populate_script_result_table(db: PgConnection, script_id: int) -> Dict[str, Any]:
+    """
+    Executes a SQL script and inserts the results into its dedicated staging table.
+    The staging table is created if it doesn't exist, and truncated before insertion.
+    """
+    cursor = None
+    try:
+        # 1. Get the script content
+        script_info = get_sql_script(db, script_id)
+        if not script_info or 'content' not in script_info:
+            raise ValueError(f"Script with ID {script_id} not found.")
+        
+        script_content = script_info['content']
+        stg_table_name_str = _get_stg_table_name_str(script_id)
+        
+        # Sanitize script content for use in DDL/DML
+        clean_script_content = script_content.strip()
+        if clean_script_content.endswith(';'):
+            clean_script_content = clean_script_content[:-1]
+
+        cursor = db.cursor()
+
+        # 2. Ensure the staging table exists, creating it if necessary
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = %s AND table_name = %s
+            )
+        """, ('stg', stg_table_name_str))
+        table_exists = cursor.fetchone()[0]
+
+        if not table_exists:
+            # Create the table if it does not exist
+            create_table_query = sql.SQL("CREATE TABLE {schema}.{table} AS ({script_content}) WITH NO DATA;").format(
+                schema=sql.Identifier('stg'),
+                table=sql.Identifier(stg_table_name_str),
+                script_content=sql.SQL(clean_script_content)
+            )
+            cursor.execute(create_table_query)
+        else:
+            # If it exists, truncate it to clear old data
+            truncate_query = sql.SQL("TRUNCATE TABLE {schema}.{table};").format(
+                schema=sql.Identifier('stg'),
+                table=sql.Identifier(stg_table_name_str)
+            )
+            cursor.execute(truncate_query)
+
+        # 3. Insert data from the script into the staging table
+        insert_query = sql.SQL("INSERT INTO {schema}.{table} {script_content};").format(
+            schema=sql.Identifier('stg'),
+            table=sql.Identifier(stg_table_name_str),
+            script_content=sql.SQL(clean_script_content)
+        )
+        cursor.execute(insert_query)
+        inserted_rows = cursor.rowcount
+        
+        db.commit()
+        
+        return {"success": True, "inserted_rows": inserted_rows, "table": f"stg.{stg_table_name_str}"}
+
+    except Exception:
+        if db: db.rollback()
+        raise
+    finally:
+        if cursor: cursor.close()
+
+def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
+    """
+    Publishes results from a script's staging table to the central dq.bad_detail table.
+    For each (rule_id, source_id) pair in the staging table, it deletes existing
+    records from dq.bad_detail and then inserts the new ones.
+    """
+    cursor = None
+    stg_table_name_str = _get_stg_table_name_str(script_id)
+    stg_table_identifier = sql.Identifier(stg_table_name_str)
+    stg_schema_identifier = sql.Identifier('stg')
+    
+    try:
+        cursor = db.cursor()
+
+        # 1. Get distinct (rule_id, source_id) pairs from the staging table.
+        get_keys_query = sql.SQL("SELECT DISTINCT rule_id, source_id FROM {schema}.{table};").format(
+            schema=stg_schema_identifier,
+            table=stg_table_identifier
+        )
+        cursor.execute(get_keys_query)
+        keys_to_replace = cursor.fetchall()
+
+        if not keys_to_replace:
+            # If the staging table is empty, there's nothing to publish.
+            return {"success": True, "message": "Staging table is empty. Nothing to publish.", "published_rows": 0}
+        
+        # 2. Delete existing records from dq.bad_detail that match these keys.
+        # The argument for 'IN %s' needs to be a tuple of tuples.
+        delete_query = sql.SQL("DELETE FROM {schema}.{table} WHERE (rule_id, source_id) IN %s;").format(
+            schema=sql.Identifier('dq'),
+            table=sql.Identifier('bad_detail')
+        )
+        cursor.execute(delete_query, (tuple(keys_to_replace),))
+
+        # 3. Insert the new records from the staging table.
+        # The column names are known and validated to be correct when the script was saved.
+        insert_query = sql.SQL("""
+            INSERT INTO {target_schema}.{target_table} (rule_id, source_id, source_uid, data_value, txn_date)
+            SELECT rule_id, source_id, source_uid, data_value, txn_date
+            FROM {source_schema}.{source_table};
+        """).format(
+            target_schema=sql.Identifier('dq'),
+            target_table=sql.Identifier('bad_detail'),
+            source_schema=stg_schema_identifier,
+            source_table=stg_table_identifier
+        )
+        cursor.execute(insert_query)
+        published_rows = cursor.rowcount
+
+        db.commit()
+
+        return {"success": True, "published_rows": published_rows, "keys_replaced_count": len(keys_to_replace)}
+
+    except Exception:
+        if db: db.rollback()
+        raise
+    finally:
+        if cursor: cursor.close()
