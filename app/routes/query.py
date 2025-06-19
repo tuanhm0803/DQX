@@ -3,13 +3,18 @@ from app.database import get_db
 from app import crud
 import psycopg2  # For error handling
 from psycopg2.extensions import connection as PgConnection  # For type hinting
+from pydantic import BaseModel
+
+class QueryRequest(BaseModel):
+    query: str
 
 router = APIRouter()
 
 
 @router.post("/")
-def execute_query(query: str, db: PgConnection = Depends(get_db)):  # Changed type hint
+def execute_query(request: QueryRequest, db: PgConnection = Depends(get_db)):  # Changed type hint
     """Execute a custom SQL query (read-only)"""
+    query = request.query
     if not query.strip().lower().startswith("select"):
         raise HTTPException(status_code=400, detail="Only SELECT queries are allowed")
 

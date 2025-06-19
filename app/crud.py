@@ -383,6 +383,33 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
         if cursor:
             cursor.close()
 
+def get_script_count(db: PgConnection) -> int:
+    """Get the total number of saved SQL scripts."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = "SELECT COUNT(*) FROM dq.dq_sql_scripts;"
+        cursor.execute(query)
+        count = cursor.fetchone()[0]
+        return count
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_bad_detail_count(db: PgConnection) -> int:
+    """Get the total number of rows in the dq.bad_detail table."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = "SELECT COUNT(*) FROM dq.bad_detail;"
+        cursor.execute(query)
+        count = cursor.fetchone()[0]
+        return count
+    finally:
+        if cursor:
+            cursor.close()
+
+
 def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
     """Creates a new SQL script and its corresponding staging table."""
     cursor = None

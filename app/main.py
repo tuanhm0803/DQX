@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse
 import os
-from .routes import tables, query, sql_scripts
+from .routes import tables, query, sql_scripts, stats
 
 # FastAPI app
 app = FastAPI(title="Database Explorer API")
@@ -29,8 +29,9 @@ app.add_middleware(
 
 # Include routes
 app.include_router(tables.router, prefix="/tables", tags=["Tables"])
-app.include_router(query.router, prefix="/query", tags=["Query"])
+app.include_router(query.router, prefix="/query_db", tags=["Query"])
 app.include_router(sql_scripts.router, prefix="/scripts", tags=["SQL Scripts"])
+app.include_router(stats.router, prefix="/stats", tags=["Stats"])
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -39,6 +40,10 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 @app.get("/editor", response_class=RedirectResponse)
 def redirect_to_editor():
     return "/static/sql_editor.html"
+
+@app.get("/bad_detail_query", response_class=RedirectResponse)
+def redirect_to_bad_detail_query():
+    return "/static/bad_detail_query.html"
 
 # Root endpoint
 @app.get("/", response_class=RedirectResponse)

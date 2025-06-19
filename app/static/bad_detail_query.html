@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQX - Query Bad Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(120deg, #d9fffa 0%, #e0e7ff 100%);
+            color: rgb(112, 112, 112);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 108, 197, 0.2);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: rgba(0, 167, 209, 0.2);
+        }
+    </style>
+</head>
+<body class="font-sans">
+    <div class="container mt-4 mb-4 text-end">
+        <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
+            <i class="bi bi-house-door"></i> Back to Main Page
+        </a>
+    </div>
+    <div class="container mx-auto p-8">
+        <div class="glass-card p-6 mb-8">
+            <h1 class="text-4xl font-bold mb-4 text-center">DQ Errors query</h1>
+        </div>
+
+        <div class="glass-card p-6">
+            <h2 class="text-2xl font-bold mb-4">Filters</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <input type="text" id="rule_id_filter" placeholder="Filter by Rule ID" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="source_id_filter" placeholder="Filter by Source ID" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="query_button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300">Query Data</button>
+            </div>
+
+            <h2 class="text-2xl font-bold mb-4 mt-8">Results</h2>
+            <div class="overflow-x-auto">
+                <table id="results_table" class="min-w-full">
+                    <thead>
+                        <tr>
+                            <th>Loading...</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Table rows will be generated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('query_button').addEventListener('click', () => {
+            const ruleId = document.getElementById('rule_id_filter').value;
+            const sourceId = document.getElementById('source_id_filter').value;
+
+            let queryString = 'SELECT * FROM dq.bad_detail';
+            const conditions = [];
+            if (ruleId) {
+                conditions.push(`rule_id = '${ruleId}'`);
+            }
+            if (sourceId) {
+                conditions.push(`source_id = '${sourceId}'`);
+            }
+
+            if (conditions.length > 0) {
+                queryString += ' WHERE ' + conditions.join(' AND ');
+            }
+            queryString += ' LIMIT 100'; // Limit results for performance
+
+            fetch('/query_db', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: queryString }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const table = document.getElementById('results_table');
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+
+                // Clear previous results
+                thead.innerHTML = '';
+                tbody.innerHTML = '';
+
+                if (data.data && data.data.length > 0) {
+                    // Create headers
+                    const headers = Object.keys(data.data[0]);
+                    const headerRow = document.createElement('tr');
+                    headers.forEach(headerText => {
+                        const th = document.createElement('th');
+                        th.textContent = headerText;
+                        headerRow.appendChild(th);
+                    });
+                    thead.appendChild(headerRow);
+
+                    // Create rows
+                    data.data.forEach(rowData => {
+                        const row = document.createElement('tr');
+                        headers.forEach(header => {
+                            const td = document.createElement('td');
+                            td.textContent = rowData[header];
+                            row.appendChild(td);
+                        });
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="100%" class="text-center">No results found.</td></tr>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const tbody = document.getElementById('results_table').querySelector('tbody');
+                tbody.innerHTML = `<tr><td colspan="100%" class="text-center text-red-500">An error occurred: ${error.message}</td></tr>`;
+            });
+        });
+    </script>
+</body>
+</html>

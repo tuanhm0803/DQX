@@ -8,15 +8,17 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         :root {
-            --primary-color: #3995d3;
-            --secondary-color: #2c3e50;
+            --primary-color: #33a8f7;
+            --secondary-color: #00568f;
             --accent-color: #e74c3c;
             --light-bg: #f5f7fa;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light-bg);
+            background: linear-gradient(120deg, #d9fffa 0%, #e0e7ff 100%);
+            min-height: 100vh;
+            background-attachment: fixed;
             color: #333;
             padding-top: 56px;
         }
@@ -158,30 +160,65 @@
         }
         
         .db-stats {
-            background-color: white;
+            background: rgba(255,255,255,0.92);
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            padding: 30px;
-            margin-bottom: 50px;
+            padding: 18px;
+            margin-bottom: 30px;
+            transform: scale(0.8);
+            max-width: 80%;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .stat-item {
             text-align: center;
-            padding: 20px 10px;
+            padding: 12px 6px;
         }
         
         .stat-number {
-            font-size: 2.5rem;
+            font-size: 2.1rem;
             font-weight: bold;
             color: var(--primary-color);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         
         .stat-label {
-            font-size: 1rem;
+            font-size: 0.95rem;
             color: var(--secondary-color);
             text-transform: uppercase;
             letter-spacing: 1px;
+        }
+        
+        .navbar, .db-stats, .feature-card, .footer, .table-responsive {
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.10);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        .feature-card, .db-stats {
+            background: rgba(255,255,255,0.92);
+            border: 1px solid rgba(255,255,255,0.18);
+            transition: box-shadow 0.3s, transform 0.3s;
+        }
+        .feature-card:hover, .db-stats:hover {
+            box-shadow: 0 16px 40px 0 rgba(31, 38, 135, 0.18);
+            transform: translateY(-2px) scale(1.01);
+        }
+        .btn, .btn-primary, .btn-outline-light, .btn-outline-success, .btn-outline-primary {
+            border-radius: 8px !important;
+            transition: box-shadow 0.2s, background 0.2s, color 0.2s;
+        }
+        .btn:hover, .btn:focus {
+            box-shadow: 0 2px 8px rgba(57, 149, 211, 0.15);
+            filter: brightness(1.07);
+        }
+        .table {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .modal-content {
+            border-radius: 16px;
         }
     </style>
 </head>
@@ -202,10 +239,10 @@
                         <a class="nav-link" href="/static/sql_editor.html">SQL Editor</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" id="tablesLink" href="#">Tables</a>
+                        <a class="nav-link" href="/docs" target="_blank">API Docs</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+                        <a class="nav-link" href="/static/bad_detail_query.html">DQ Errors query</a>
                     </li>
                 </ul>
             </div>
@@ -215,8 +252,8 @@
     <!-- Hero Section -->
     <header class="hero text-center">
         <div class="container">
-            <h1>DQX Database Explorer</h1>
-            <p>A powerful tool for database exploration, schema analysis, and SQL script management. Explore your data with ease and confidence.</p>
+            <h1>Data quality management tool</h1>
+            <p>A powerful tool for data quality management. Explore your data with ease and confidence.</p>
             <a href="/static/sql_editor.html" class="btn btn-light btn-lg me-3">SQL Editor</a>
             <a href="#features" class="btn btn-outline-light btn-lg">Learn More</a>
         </div>
@@ -226,13 +263,13 @@
     <section class="container mb-5">
         <div class="db-stats">
             <div class="row">
-                <div class="col-md-4 stat-item" id="tableCountStat">
-                    <div class="stat-number">0</div>
-                    <div class="stat-label">Tables</div>
-                </div>
                 <div class="col-md-4 stat-item" id="scriptCountStat">
                     <div class="stat-number">0</div>
                     <div class="stat-label">Saved Scripts</div>
+                </div>
+                <div class="col-md-4 stat-item" id="dqErrorsStat">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">DQ Errors Found</div>
                 </div>
                 <div class="col-md-4 stat-item">
                     <div class="stat-number"><i class="bi bi-lightning-charge"></i></div>
@@ -254,51 +291,29 @@
                         </div>
                         <h3>SQL Tools</h3>
                         <p>Write, execute, save, and manage SQL scripts with powerful visualization tools for query results.</p>
-                        <button class="btn btn-primary mt-3">Open Tools</button>
                     </div>
                 </a>
             </div>
             <div class="col-md-4 mb-4">
-                <div class="feature-card" id="tableExplorerCard">
-                    <div class="feature-icon">
-                        <i class="bi bi-table"></i>
+                <a href="/bad_detail_query" class="card-link">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-search"></i></div>
+                        <h3>Query Bad Details</h3>
+                        <p>Deep dive into data quality issues. Filter by rule ID and source ID to investigate specific problems.</p>
                     </div>
-                    <h3>Table Explorer</h3>
-                    <p>Browse your database structure, examine table schemas, and view table data in a user-friendly interface.</p>
-                    <button class="btn btn-primary mt-3">Explore Tables</button>
-                </div>
+                </a>
             </div>
             <div class="col-md-4 mb-4">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="bi bi-gear"></i>
+                <a href="/docs" class="card-link">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-gear"></i>
+                        </div>
+                        <h3>API Docs</h3>
+                        <p>Built on FastAPI, DQX provides robust API endpoints for programmatic access to all features.</p>
                     </div>
-                    <h3>API Access</h3>
-                    <p>Built on FastAPI, DQX provides robust API endpoints for programmatic access to all features.</p>
-                    <button class="btn btn-primary mt-3" onclick="window.location.href='/docs'">API Docs</button>
-                </div>
+                </a>
             </div>
-        </div>
-    </section>
-
-    <!-- Tables Preview Section -->
-    <section class="container mb-5 mt-5">
-        <h2 class="section-title">Database Tables</h2>
-        <div class="table-responsive">
-            <table class="table table-striped table-hover" id="tablesPreview">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Table Name</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Tables will be loaded here -->
-                    <tr>
-                        <td colspan="2" class="text-center">Loading tables...</td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     </section>
 
@@ -329,7 +344,7 @@
             </div>
             <hr style="border-color: rgba(255, 255, 255, 0.1);">
             <div class="text-center">
-                <p>&copy; 2023 DQX Database Explorer. All rights reserved.</p>
+                <p>&copy; DQX. All rights reserved.</p>
             </div>
         </div>
     </footer>
@@ -337,179 +352,21 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Fetch tables for the preview section
-            fetchTables();
-            
-            // Fetch script count
-            fetchScriptCount();
-            
-            // Add event listeners for table explorer actions
-            document.getElementById('tablesLink').addEventListener('click', function(e) {
-                e.preventDefault();
-                document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
-                setTimeout(() => {
-                    document.getElementById('tableExplorerCard').click();
-                }, 500);
-            });
-            
-            document.getElementById('tableExplorerCard').addEventListener('click', function() {
-                // Smooth scroll to the tables section
-                document.querySelector('section:nth-of-type(3)').scrollIntoView({ behavior: 'smooth' });
-            });
-        });
-        
-        // Function to fetch tables
-        function fetchTables() {
-            fetch('/tables/')
+
+        // Function to fetch stats
+        function fetchStats() {
+            fetch('/stats/')
                 .then(response => response.json())
-                .then(tables => {
-                    // Update the table count stat
-                    document.querySelector('#tableCountStat .stat-number').textContent = tables.length;
-                    
-                    // Update the tables preview
-                    const tableBody = document.querySelector('#tablesPreview tbody');
-                    tableBody.innerHTML = '';
-                    
-                    if (tables.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="2" class="text-center">No tables found in the database</td></tr>';
-                        return;
-                    }
-                    
-                    tables.forEach(table => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${table}</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary me-2" onclick="viewTableStructure('${table}')">
-                                    <i class="bi bi-diagram-3"></i> Structure
-                                </button>
-                                <button class="btn btn-sm btn-outline-success" onclick="viewTableData('${table}')">
-                                    <i class="bi bi-table"></i> Data
-                                </button>
-                            </td>
-                        `;
-                        tableBody.appendChild(row);
-                    });
+                .then(stats => {
+                    document.querySelector('#scriptCountStat .stat-number').textContent = stats.script_count;
+                    document.querySelector('#dqErrorsStat .stat-number').textContent = stats.bad_detail_count;
                 })
                 .catch(error => {
-                    console.error('Error fetching tables:', error);
-                    const tableBody = document.querySelector('#tablesPreview tbody');
-                    tableBody.innerHTML = '<tr><td colspan="2" class="text-center text-danger">Error loading tables</td></tr>';
+                    console.error('Error fetching stats:', error);
                 });
         }
-        
-        // Function to fetch script count
-        function fetchScriptCount() {
-            fetch('/scripts/')
-                .then(response => response.json())
-                .then(scripts => {
-                    document.querySelector('#scriptCountStat .stat-number').textContent = scripts.length;
-                })
-                .catch(error => {
-                    console.error('Error fetching scripts count:', error);
-                });
-        }
-        
-        // Function to view table structure
-        function viewTableStructure(table) {
-            // Create modal for structure display
-            const modalId = 'structureModal';
-            let modal = document.getElementById(modalId);
-            
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.className = 'modal fade';
-                modal.id = modalId;
-                modal.setAttribute('tabindex', '-1');
-                modal.setAttribute('aria-labelledby', `${modalId}Label`);
-                modal.setAttribute('aria-hidden', 'true');
-                
-                const modalHTML = `
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header bg-primary text-white">
-                                <h5 class="modal-title" id="${modalId}Label">Table Structure: <span id="structureTableName"></span></h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body" id="structureModalBody">
-                                <div class="text-center">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                modal.innerHTML = modalHTML;
-                document.body.appendChild(modal);
-            }
-            
-            // Show modal
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-            
-            // Set table name
-            document.getElementById('structureTableName').textContent = table;
-            
-            // Fetch table structure
-            fetch(`/tables/${table}/structure`)
-                .then(response => response.json())
-                .then(structure => {
-                    const modalBody = document.getElementById('structureModalBody');
-                    
-                    let tableHTML = `
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Column</th>
-                                    <th>Type</th>
-                                    <th>Nullable</th>
-                                    <th>Primary Key</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-                    
-                    structure.forEach(column => {
-                        tableHTML += `
-                            <tr>
-                                <td>${column.name}</td>
-                                <td>${column.type}</td>
-                                <td>${column.nullable ? 'Yes' : 'No'}</td>
-                                <td>${column.primary_key ? 'Yes' : 'No'}</td>
-                            </tr>
-                        `;
-                    });
-                    
-                    tableHTML += `
-                            </tbody>
-                        </table>
-                    `;
-                    
-                    modalBody.innerHTML = tableHTML;
-                })
-                .catch(error => {
-                    console.error('Error fetching table structure:', error);
-                    document.getElementById('structureModalBody').innerHTML = `
-                        <div class="alert alert-danger">
-                            Error loading table structure: ${error.message}
-                        </div>
-                    `;
-                });
-        }
-        
-        // Function to view table data
-        function viewTableData(table) {
-            // Redirect to SQL Editor with a pre-configured query
-            const query = `SELECT * FROM ${table} LIMIT 100;`;
-            localStorage.setItem('preloadedQuery', query);
-            window.location.href = '/static/sql_editor.html?preloadTable=' + encodeURIComponent(table);
-        }
+        // Fetch stats
+        fetchStats();
     </script>
 </body>
 </html>
