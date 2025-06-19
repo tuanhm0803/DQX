@@ -1,0 +1,16 @@
+CREATE TABLE dq.dq_sql_scripts (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE dq.bad_detail (
+	rule_id varchar(20),
+	source_id varchar(20),
+	source_uid varchar(500),
+	data_value varchar(2000),
+	txn_date date
+);
