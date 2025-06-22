@@ -30,3 +30,28 @@ class SQLScript(SQLScriptBase):
     
     class Config:
         orm_mode = True
+
+# --- Schedule Schemas ---
+
+class ScheduleBase(BaseModel):
+    job_name: str
+    script_id: int
+    cron_schedule: str
+    is_active: bool = True
+
+class ScheduleCreate(ScheduleBase):
+    pass
+
+class ScheduleUpdate(BaseModel):
+    job_name: Optional[str] = None
+    script_id: Optional[int] = None
+    cron_schedule: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class Schedule(ScheduleBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True

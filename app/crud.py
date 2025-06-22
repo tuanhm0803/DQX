@@ -782,3 +782,119 @@ def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
         raise
     finally:
         if cursor: cursor.close()
+
+# --- Schedule Management Functions ---
+
+def create_schedule(db: PgConnection, schedule: Dict[str, Any]) -> Dict[str, Any]:
+    """Creates a new schedule."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = """
+            INSERT INTO dq.dq_schedules (job_name, script_id, cron_schedule, is_active)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;
+        """
+        cursor.execute(query, (
+            schedule['job_name'],
+            schedule['script_id'],
+            schedule['cron_schedule'],
+            schedule.get('is_active', True)
+        ))
+        new_schedule_tuple = cursor.fetchone()
+        db.commit()
+
+        if not new_schedule_tuple:
+            raise ValueError("Failed to create schedule.")
+
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(new_schedule_tuple, column_names)
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_schedules(db: PgConnection) -> List[Dict[str, Any]]:
+    """Gets all schedules."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = "SELECT s.id, s.job_name, s.script_id, sc.name as script_name, s.cron_schedule, s.is_active, s.created_at, s.updated_at FROM dq.dq_schedules s JOIN dq.dq_sql_scripts sc ON s.script_id = sc.id ORDER BY s.id ASC;"
+        cursor.execute(query)
+        schedules_tuples = cursor.fetchall()
+
+        if not schedules_tuples:
+            return []
+
+        column_names = [desc[0] for desc in cursor.description]
+        return [_process_result_row(row, column_names) for row in schedules_tuples]
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_schedule(db: PgConnection, schedule_id: int) -> Optional[Dict[str, Any]]:
+    """Gets a single schedule by its ID."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = "SELECT id, job_name, script_id, cron_schedule, is_active, created_at, updated_at FROM dq.dq_schedules WHERE id = %s;"
+        cursor.execute(query, (schedule_id,))
+        schedule_tuple = cursor.fetchone()
+
+        if not schedule_tuple:
+            return None
+
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(schedule_tuple, column_names)
+    finally:
+        if cursor:
+            cursor.close()
+
+def update_schedule(db: PgConnection, schedule_id: int, schedule_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Updates an existing schedule."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+
+        # Construct the SET clause dynamically
+        set_parts = []
+        values = []
+        for key, value in schedule_data.items():
+            if value is not None:
+                set_parts.append(sql.SQL("{} = %s").format(sql.Identifier(key)))
+                values.append(value)
+
+        if not set_parts:
+            return get_schedule(db, schedule_id)
+
+        values.append(schedule_id)
+
+        query = sql.SQL("UPDATE dq.dq_schedules SET {} WHERE id = %s RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;").format(
+            sql.SQL(', ').join(set_parts)
+        )
+
+        cursor.execute(query, values)
+        updated_schedule_tuple = cursor.fetchone()
+        db.commit()
+
+        if not updated_schedule_tuple:
+            return None
+
+        column_names = [desc[0] for desc in cursor.description]
+        return _process_result_row(updated_schedule_tuple, column_names)
+    finally:
+        if cursor:
+            cursor.close()
+
+def delete_schedule(db: PgConnection, schedule_id: int) -> Dict[str, Any]:
+    """Deletes a schedule."""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        query = "DELETE FROM dq.dq_schedules WHERE id = %s;"
+        cursor.execute(query, (schedule_id,))
+        deleted_rows = cursor.rowcount
+        db.commit()
+        return {"success": deleted_rows > 0, "deleted_rows": deleted_rows}
+    finally:
+        if cursor:
+            cursor.close()
