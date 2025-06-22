@@ -7,6 +7,7 @@ A FastAPI application for exploring and querying databases with a web interface.
 - Browse database tables
 - Execute SQL queries
 - Save and manage SQL scripts
+- Schedule SQL scripts to run at specific intervals
 - Web interface for interacting with databases
 
 ## Installation
@@ -18,6 +19,6 @@ A FastAPI application for exploring and querying databases with a web interface.
 ## Technologies Used
 
 - FastAPI
-- SQLAlchemy
+- psycopg2
 - uvicorn
 - HTML/CSS/JavaScript

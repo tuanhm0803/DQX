@@ -14,3 +14,12 @@ CREATE TABLE dq.bad_detail (
 	data_value varchar(2000),
 	txn_date date
 );
+
+CREATE TABLE dq.dq_schedules (
+    id SERIAL PRIMARY KEY,
+    script_id INTEGER NOT NULL REFERENCES dq.dq_sql_scripts(id) ON DELETE CASCADE,
+    schedule_type VARCHAR(10) NOT NULL, -- 'daily', 'weekly', 'monthly'
+    execution_time TIME NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

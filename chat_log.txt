@@ -97,3 +97,17 @@ SUMMARY OF ACTIONS AND RESOLUTIONS:
         *   Modified `create_sql_script` to check if a script with the given name already exists before inserting a new record.
         *   Modified `update_sql_script` to check if another script (with a different ID) already has the target name before applying the update.
     *   **Error Handling:** If a duplicate name is detected, a `ValueError` is raised, which results in a `400 Bad Request` response with a clear error message to the user.
+
+12. **Scheduler Feature and UI Overhaul:**
+    *   **Requirement:** Introduce a new feature to schedule SQL scripts to run at specified intervals (daily, weekly, monthly) and refactor the frontend for a more modern and consistent look and feel.
+    *   **Implementation (Backend):
+        *   Created a new `dq.dq_schedules` table to store schedule information.
+        *   Added `create_schedule`, `get_schedules`, `update_schedule`, and `delete_schedule` functions to `app/crud.py`.
+        *   Added a new `app/routes/scheduler.py` with API endpoints to manage schedules.
+        *   Integrated the scheduler router into `app/main.py`.
+    *   **Implementation (Frontend):
+        *   Created a new `app/static/scheduler.html` page with a UI for creating and viewing schedules.
+        *   Refactored the CSS by creating a shared `app/static/css/style.css` file and linking it from all HTML pages (`index.html`, `sql_editor.html`, `bad_detail_query.html`, `scheduler.html`).
+        *   Updated `index.html` with a new "Job Scheduler" card and a more modern design.
+    *   **Fixes:**
+        *   Resolved an issue where the stats on the main page were not displaying correctly by improving the JavaScript fetch logic in `index.html`.
