@@ -31,6 +31,9 @@ class SQLScript(SQLScriptBase):
     class Config:
         orm_mode = True
 
+class SQLExecuteRequest(BaseModel):
+    script_content: str
+
 # --- Schedule Schemas ---
 
 class ScheduleBase(BaseModel):

@@ -111,17 +111,53 @@ def _format_value_for_json(value: Any) -> Any:
         except UnicodeDecodeError:
             return value.hex() # Fallback to hex if not valid UTF-8
     # For other types, attempt to return as is, relying on JSONEncoder for complex ones
-    return value
+    try:
+        return str(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 def _process_result_row(row: tuple, column_names: List[str]) -> Dict[str, Any]:
-    """Process a single row of SQL query results"""
-    return {col_name: _format_value_for_json(row_val) for col_name, row_val in zip(column_names, row)}
+    """Converts a database row tuple to a dictionary with column names, formatting values."""
+    if row is None:
+        return None
+    return dict(zip(column_names, [_format_value_for_json(v) for v in row]))
 
-class TableStructureValidationError(ValueError):
-    """Exception raised when table structure validation fails."""
-    pass
+def get_script_count(db: PgConnection) -> int:
+    """Gets the total number of SQL scripts."""
+    with db.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM dq.dq_sql_scripts")
+        count = cursor.fetchone()[0]
+        return count
 
-def get_table_names(db: PgConnection) -> List[str]:
+def get_bad_detail_count(db: PgConnection) -> int:
+    """Gets the total number of records in the bad_detail table."""
+    with db.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM dq.bad_detail")
+        count = cursor.fetchone()[0]
+        return count
+
+def get_stats(db: PgConnection):
+    script_count = get_script_count(db)
+    bad_detail_count = get_bad_detail_count(db)
+    return {"script_count": script_count, "bad_detail_count": bad_detail_count}
+
+# --- Table Operations ---
+
+def get_schemas(db: PgConnection) -> List[str]:
+    """Get all schemas in the database"""
+    cursor = None
+    try:
+        cursor = db.cursor()
+        cursor.execute("SELECT schema_name FROM information_schema.schemata;")
+        schemas = [row[0] for row in cursor.fetchall()]
+        return schemas
+    finally:
+        if cursor:
+            cursor.close()
+
+# --- DQ Table Operations ---
+
+def get_dq_table_names(db: PgConnection) -> List[str]:
     """Get all tables in the 'DQ' schema using the provided DB connection"""
     cursor = None
     try:
@@ -133,7 +169,7 @@ def get_table_names(db: PgConnection) -> List[str]:
         if cursor:
             cursor.close()
 
-def get_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[tuple]]:
+def get_dq_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[tuple]]:
     """Get the structure of a specific table using the provided DB connection"""
     cursor = None
     try:
@@ -146,7 +182,7 @@ def get_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[tup
         if cursor:
             cursor.close()
 
-def get_table_data(table_name: str, skip: int, limit: int, db: PgConnection) -> Dict[str, Any]:
+def get_dq_table_data(table_name: str, skip: int, limit: int, db: PgConnection) -> Dict[str, Any]:
     """Get data from a specific table with pagination using the provided DB connection"""
     cursor = None
     try:
@@ -383,33 +419,6 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
         if cursor:
             cursor.close()
 
-def get_script_count(db: PgConnection) -> int:
-    """Get the total number of saved SQL scripts."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        query = "SELECT COUNT(*) FROM dq.dq_sql_scripts;"
-        cursor.execute(query)
-        count = cursor.fetchone()[0]
-        return count
-    finally:
-        if cursor:
-            cursor.close()
-
-def get_bad_detail_count(db: PgConnection) -> int:
-    """Get the total number of rows in the dq.bad_detail table."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        query = "SELECT COUNT(*) FROM dq.bad_detail;"
-        cursor.execute(query)
-        count = cursor.fetchone()[0]
-        return count
-    finally:
-        if cursor:
-            cursor.close()
-
-
 def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
     """Creates a new SQL script and its corresponding staging table."""
     cursor = None
@@ -605,6 +614,10 @@ def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
     Executes the provided SQL script content after validating its structure.
     This function needs to be carefully designed to prevent harmful operations.
     """
+    # Hotfix to swap arguments if they are passed in the wrong order
+    if isinstance(db, str) and hasattr(script_content, 'cursor'):
+        db, script_content = script_content, db
+
     # First, validate the script structure and columns.
     _validate_sql_script_columns(script_content)
 

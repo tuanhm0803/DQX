@@ -49,7 +49,9 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 # Page Endpoints
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: PgConnection = Depends(get_db)):
-    stats_data = crud.get_stats(db)
+    script_count = crud.get_script_count(db)
+    bad_detail_count = crud.get_bad_detail_count(db)
+    stats_data = {"script_count": script_count, "bad_detail_count": bad_detail_count}
     return templates.TemplateResponse("index.html", {"request": request, "stats": stats_data})
 
 @app.get("/bad_detail_query", response_class=HTMLResponse)
