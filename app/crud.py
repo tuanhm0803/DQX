@@ -124,17 +124,25 @@ def _process_result_row(row: tuple, column_names: List[str]) -> Dict[str, Any]:
 
 def get_script_count(db: PgConnection) -> int:
     """Gets the total number of SQL scripts."""
-    with db.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) FROM dq.dq_sql_scripts")
-        count = cursor.fetchone()[0]
-        return count
+    try:
+        with db.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM dq.dq_sql_scripts")
+            count = cursor.fetchone()[0]
+            return count
+    except Exception as e:
+        print(f"Error getting script count: {str(e)}")
+        return 0  # Return 0 if there's an error (e.g., table doesn't exist)
 
 def get_bad_detail_count(db: PgConnection) -> int:
     """Gets the total number of records in the bad_detail table."""
-    with db.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) FROM dq.bad_detail")
-        count = cursor.fetchone()[0]
-        return count
+    try:
+        with db.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM dq.bad_detail")
+            count = cursor.fetchone()[0]
+            return count
+    except Exception as e:
+        print(f"Error getting bad_detail count: {str(e)}")
+        return 0  # Return 0 if there's an error (e.g., table doesn't exist)
 
 def get_stats(db: PgConnection):
     script_count = get_script_count(db)

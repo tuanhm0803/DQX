@@ -25,9 +25,11 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+                    </li>                    <li class="nav-item">
+                        <a class="nav-link" href="/bad_detail_query">DQ Errors Query</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/bad_detail_query">DQ Errors query</a>
+                        <a class="nav-link" href="/visualization">DQ Visualization</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/chat_logger">Chat Logger</a>
@@ -50,13 +52,12 @@
     <!-- Stats Section -->
     <section class="container mb-5">
         <div class="db-stats">
-            <div class="row">
-                <div class="col-md-4 stat-item" id="scriptCountStat">
-                    <div class="stat-number">{{ stats.total_scripts }}</div>
+            <div class="row">                <div class="col-md-4 stat-item" id="scriptCountStat">
+                    <div class="stat-number">{{ stats.script_count }}</div>
                     <div class="stat-label">Saved Scripts</div>
                 </div>
                 <div class="col-md-4 stat-item" id="dqErrorsStat">
-                    <div class="stat-number">{{ stats.total_errors }}</div>
+                    <div class="stat-number">{{ stats.bad_detail_count }}</div>
                     <div class="stat-label">DQ Errors Found</div>
                 </div>
                 <div class="col-md-4 stat-item">

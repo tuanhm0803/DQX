@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DQX - Query Bad Details</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
 </head>
-<body class="font-sans">
-    <div class="container mt-4 mb-4 text-end">
+<body class="font-sans">    <div class="container mt-4 mb-4 text-end">
+        <a href="/visualization{% if rule_id %}?rule_id={{ rule_id }}{% if source_id %}&source_id={{ source_id }}{% endif %}{% elif source_id %}?source_id={{ source_id }}{% endif %}" 
+           class="btn btn-outline-info me-2" style="border-radius: 8px;">
+            <i class="bi bi-graph-up"></i> View Visualizations
+        </a>
         <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
             <i class="bi bi-house-door"></i> Back to Main Page
         </a>
@@ -19,41 +22,154 @@
         </div>
 
         <div class="glass-card p-6">
-            <h2 class="text-2xl font-bold mb-4">Filters</h2>
-            <form method="get">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <input type="text" name="rule_id" placeholder="Filter by Rule ID" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" value="{{ rule_id }}">
-                    <input type="text" name="source_id" placeholder="Filter by Source ID" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" value="{{ source_id }}">
-                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300">Query Data</button>
+            <h2 class="text-2xl font-bold mb-4">Filters</h2>            <form method="get">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">                    <select name="rule_id" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Select Rule ID --</option>
+                        <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
+                        {% if rule_ids %}
+                            {% for id in rule_ids %}
+                                <option value="{{ id }}" {% if id == rule_id %}selected{% endif %}>{{ id }}</option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="" disabled>(no rule IDs available)</option>
+                        {% endif %}
+                    </select>                    <select name="source_id" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Select Source ID --</option>
+                        <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
+                        {% if source_ids %}
+                            {% for id in source_ids %}
+                                <option value="{{ id }}" {% if id == source_id %}selected{% endif %}>{{ id }}</option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="" disabled>(no source IDs available)</option>
+                        {% endif %}
+                    </select>
+                    <div class="flex space-x-2">
+                        <button type="submit" class="flex-1 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300">
+                            <i class="bi bi-search mr-1"></i> Query Data
+                        </button>
+                        <a href="/bad_detail_query" class="flex-1 bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition duration-300 text-center">
+                            <i class="bi bi-x-circle mr-1"></i> Clear Filters
+                        </a>
+                    </div>
                 </div>
             </form>
 
-            <h2 class="text-2xl font-bold mb-4 mt-8">Results</h2>
-            <div class="overflow-x-auto">
-                <table class="min-w-full">
-                    <thead>
-                        <tr>
-                            {% if headers %}
-                                {% for header in headers %}
-                                    <th>{{ header }}</th>
+            <h2 class="text-2xl font-bold mb-4 mt-8">Results {% if data %}<span class="text-sm font-normal text-gray-400">({{ data|length }} rows)</span>{% endif %}</h2>
+            
+            {% if rule_id or source_id %}
+            <div class="mb-4 p-3 bg-blue-900/30 rounded">
+                <p class="text-sm text-gray-300">
+                    <i class="bi bi-filter"></i> Filters applied:
+                    {% if rule_id %}<span class="badge bg-blue-500 text-white px-2 py-1 rounded mr-2">Rule ID: {{ rule_id }}</span>{% endif %}
+                    {% if source_id %}<span class="badge bg-blue-500 text-white px-2 py-1 rounded">Source ID: {{ source_id }}</span>{% endif %}
+                </p>
+            </div>
+            {% endif %}            <div class="overflow-x-auto">
+                {% if rule_id or source_id %}
+                    {% if headers %}
+                        <table class="min-w-full">
+                            <thead>
+                                <tr>
+                                    {% for header in headers %}
+                                        <th>{{ header }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in data %}
+                                <tr>
+                                    {% for cell in row %}
+                                    <td>{{ cell }}</td>
+                                    {% endfor %}
+                                </tr>
                                 {% endfor %}
-                            {% else %}
-                                <th>No results</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in data %}
-                        <tr>
-                            {% for cell in row %}
-                            <td>{{ cell }}</td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="text-center p-10 bg-gray-800/50 rounded">
+                            <i class="bi bi-search text-4xl text-gray-500"></i>
+                            <p class="mt-2 text-gray-400">No results found for your search criteria</p>
+                            <p class="text-sm text-gray-500 mt-1">Try selecting different filter options</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center p-10 bg-gray-800/50 rounded">
+                        <i class="bi bi-funnel text-4xl text-gray-500"></i>
+                        <p class="mt-2 text-gray-400">Select filters above to query data</p>
+                        <p class="text-sm text-gray-500 mt-1">Results will appear here once you apply filters</p>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
+
+    <script>
+        // Function to make dropdowns searchable
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get the select elements
+            const ruleIdSelect = document.querySelector('select[name="rule_id"]');
+            const sourceIdSelect = document.querySelector('select[name="source_id"]');
+            
+            // Add event listeners for keyboard navigation
+            if (ruleIdSelect) {
+                enhanceDropdown(ruleIdSelect);
+            }
+            
+            if (sourceIdSelect) {
+                enhanceDropdown(sourceIdSelect);
+            }
+        });
+
+        function enhanceDropdown(selectElement) {
+            // Add keyup event for filtering options
+            selectElement.addEventListener('keyup', function(e) {
+                const searchText = e.target.value.toLowerCase();
+                
+                // Skip navigation keys
+                if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+                    return;
+                }
+                
+                // Get all options except the first one (placeholder)
+                const options = Array.from(selectElement.options).slice(1);
+                
+                // Track if we found any matches
+                let foundMatch = false;
+                
+                // Filter options based on input text
+                options.forEach(option => {
+                    const optionText = option.text.toLowerCase();
+                    if (optionText.includes(searchText)) {
+                        option.style.display = '';
+                        foundMatch = true;
+                    } else {
+                        option.style.display = 'none';
+                    }
+                });
+                
+                // If we have a match and a key other than navigation was pressed,
+                // open the dropdown to show the filtered options
+                if (foundMatch && !['Tab'].includes(e.key)) {
+                    selectElement.size = Math.min(10, options.length);
+                    selectElement.focus();
+                }
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (e.target !== selectElement) {
+                    selectElement.size = 1;
+                }
+            });
+            
+            // Close dropdown on blur
+            selectElement.addEventListener('blur', function() {
+                setTimeout(() => {
+                    selectElement.size = 1;
+                }, 200);
+            });
+        }
+    </script>
 </body>
 </html>
