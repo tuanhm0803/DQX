@@ -163,3 +163,55 @@ DQX/
 *   **Error Handling**: Global exception handling in `main.py` ensures that all unhandled backend errors return a JSON response. Frontend JavaScript in `sql_editor.html` includes robust error handling for API calls.
 *   **Scheduler**: A new feature allows users to schedule SQL scripts to run at daily, weekly, or monthly intervals. This is managed through a new UI and a set of API endpoints.
 *   **Modern UI**: The frontend has been refactored to use a shared CSS stylesheet, providing a consistent and modern look and feel across all pages.
+
+## Utilities
+
+The `utils` directory contains several utility modules that provide additional functionality:
+
+### Chat Logging (logger.py)
+
+The `logger.py` module provides comprehensive chat logging capabilities:
+
+*   **Core Functions**:
+    *   `log_chat(user_message, assistant_response, custom_timestamp=None)`: Records conversations between users and assistants with timestamps.
+    *   `read_chat_logs(num_entries=None, from_date=None)`: Retrieves and parses logs from the log file with filtering options.
+    *   `clear_chat_logs()`: Removes all logs by deleting the log file.
+    *   `get_chat_log_path()`: Returns the absolute path to the chat log file.
+
+*   **Features**:
+    *   Custom timestamps for backdating logs
+    *   Structured format with clear separation between conversations
+    *   Filtering logs by date or limiting to recent entries
+    *   Error handling to ensure logging stability
+
+*   **Integration Points**:
+    *   Web UI (`/chat_logger`) for manual log entry
+    *   REST API endpoint (`/api/log_chat`) for programmatic logging
+    *   Command-line script (`utils/log_chat_cli.py`) for direct logging from the terminal
+    *   Python API for direct integration into application code
+
+*   **Example Usage**:
+    ```python
+    # Import the logging function
+    from utils.logger import log_chat
+    
+    # Log a conversation
+    log_chat(
+        user_message="How do I execute a SQL query?",
+        assistant_response="You can use the SQL Editor at /editor"
+    )
+    
+    # Read and process logs
+    from utils.logger import read_chat_logs
+    from datetime import datetime, timedelta
+    
+    # Get logs from the past week
+    one_week_ago = datetime.now() - timedelta(days=7)
+    recent_logs = read_chat_logs(from_date=one_week_ago)
+    
+    # Process the logs
+    for log in recent_logs:
+        print(f"[{log['timestamp']}] User: {log['user']}")
+    ```
+
+For more examples, see the `utils/logger_examples.py` file.

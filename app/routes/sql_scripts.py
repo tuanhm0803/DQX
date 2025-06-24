@@ -53,7 +53,13 @@ async def execute_script_form(
     results = None
     error = None
     try:
-        results = crud.execute_query(db, content)
+        query_results = crud.execute_query(content, db)
+        if "data" in query_results and "columns" in query_results:
+            # Transform the data to the format expected by the template
+            results = {
+                "headers": query_results["columns"],
+                "rows": [list(row.values()) for row in query_results["data"]]
+            }
     except Exception as e:
         error = str(e)
     
@@ -102,6 +108,6 @@ def delete_script(script_id: int, db: PgConnection = Depends(get_db)):
 @api_router.post("/execute")
 def execute_script(request: schemas.SQLExecuteRequest, db: PgConnection = Depends(get_db)):
     try:
-        return crud.execute_query(db, request.script_content)
+        return crud.execute_query(request.script_content, db)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

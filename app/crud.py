@@ -312,14 +312,21 @@ def delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgCon
         if cursor:
             cursor.close()
 
-def execute_query(query_string: str, db: PgConnection) -> Dict[str, Any]:
-    """Execute a custom SQL query (assumed SELECT) using the provided DB connection"""
+def execute_query(query_string: str, db: PgConnection, params=None) -> Dict[str, Any]:
+    """Execute a custom SQL query (assumed SELECT) using the provided DB connection with optional parameters"""
+    # Hotfix to swap arguments if they are passed in the wrong order
+    if isinstance(query_string, PgConnection) and isinstance(db, str):
+        query_string, db = db, query_string
+        
     cursor = None
     if not query_string.strip().lower().startswith("select"):
         raise ValueError("Only SELECT queries are allowed for execute_query.")
     try:
         cursor = db.cursor()
-        cursor.execute(query_string)
+        if params:
+            cursor.execute(query_string, params)
+        else:
+            cursor.execute(query_string)
         
         if cursor.description: 
             column_names = [desc[0] for desc in cursor.description]
@@ -676,6 +683,10 @@ def populate_script_result_table(db: PgConnection, script_id: int) -> Dict[str, 
     Executes a SQL script and inserts the results into its dedicated staging table.
     The staging table is created if it doesn't exist, and truncated before insertion.
     """
+    # Hotfix to swap arguments if they are passed in the wrong order
+    if isinstance(db, int) and isinstance(script_id, PgConnection):
+        db, script_id = script_id, db
+        
     cursor = None
     try:
         # 1. Get the script content
@@ -743,6 +754,10 @@ def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
     For each (rule_id, source_id) pair in the staging table, it deletes existing
     records from dq.bad_detail and then inserts the new ones.
     """
+    # Hotfix to swap arguments if they are passed in the wrong order
+    if isinstance(db, int) and isinstance(script_id, PgConnection):
+        db, script_id = script_id, db
+        
     cursor = None
     stg_table_name_str = _get_stg_table_name_str(script_id)
     stg_table_identifier = sql.Identifier(stg_table_name_str)

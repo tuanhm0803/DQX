@@ -16,8 +16,7 @@
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+            <div class="collapse navbar-collapse" id="navbarNav">                <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a class="nav-link active" href="/">Home</a>
                     </li>
@@ -29,6 +28,9 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/bad_detail_query">DQ Errors query</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/chat_logger">Chat Logger</a>
                     </li>
                 </ul>
             </div>
@@ -89,14 +91,24 @@
                     </div>
                 </a>
             </div>
-            <div class="col-md-4 mb-4">
-                <a href="/schedules/" class="card-link">
+            <div class="col-md-4 mb-4">                <a href="/schedules/" class="card-link">
                     <div class="feature-card">
                         <div class="feature-icon">
                             <i class="bi bi-clock-history"></i>
                         </div>
                         <h3>Job Scheduler</h3>
                         <p>Automate your data quality checks by scheduling SQL scripts to run at specific times.</p>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4 mb-4">
+                <a href="/chat_logger" class="card-link">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-chat-text"></i>
+                        </div>
+                        <h3>Chat Logger</h3>
+                        <p>Log and archive conversations between users and assistants for future reference.</p>
                     </div>
                 </a>
             </div>
