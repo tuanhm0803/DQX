@@ -1,23 +1,29 @@
 /* General Body and Theming */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f8f9fa;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e4eaff 100%);
     color: #333;
+    min-height: 100vh;
+    padding-bottom: 50px;
 }
 
 /* Navigation Bar */
 .navbar {
     background-color: rgba(0, 0, 0, 0.8) !important; /* Use important to override bootstrap */
     backdrop-filter: blur(10px);
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
 }
 
 .navbar-brand {
-    font-weight: bold;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: 1px;
     font-size: 1.5rem;
 }
 
 .navbar-brand span {
     color: #00aaff;
+    font-weight: 900;
 }
 
 /* Hero Section */
@@ -306,9 +312,153 @@ th {
 .actions-column {
     min-width: 100px;
 }
+/* DQX Common Components - Added for consistent styling */
 .glass-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(10px);
     border-radius: 10px;
     border: 1px solid rgba(0, 108, 197, 0.2);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.glass-card:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.shadow {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Container spacing for all pages */
+.container {
+    padding-top: 80px;
+}
+
+/* Form styling */
+.form-control, .form-select {
+    border-radius: 6px;
+    padding: 10px 15px;
+    border: 1px solid #e1e5ea;
+    background-color: rgba(255, 255, 255, 0.9);
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.25rem rgba(0, 123, 255, 0.15);
+    background-color: #ffffff;
+}
+
+/* Table styling */
+.table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* Button consistent styling */
+.btn {
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #0a58ca 0%, #094db1 100%);
+    transform: translateY(-2px);
+}
+
+/* Professional styling enhancements */
+.navbar {
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.navbar-brand span {
+    color: #00aaff;
+    font-weight: 900;
+}
+
+/* Improved form styling */
+.form-control, .form-select {
+    border-radius: 6px;
+    padding: 10px 15px;
+    border: 1px solid #e1e5ea;
+    background-color: rgba(255, 255, 255, 0.9);
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.25rem rgba(0, 123, 255, 0.15);
+    background-color: #ffffff;
+}
+
+/* Button enhancements */
+.btn {
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* Card styling */
+.card {
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.card-header {
+    background-color: rgba(0, 123, 255, 0.05);
+    border-bottom: 1px solid rgba(0, 123, 255, 0.1);
+    padding: 15px 20px;
+}
+
+/* Table enhancements */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    font-weight: 600;
+    color: #495057;
+    border-top: none;
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* Layout spacing */
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #343a40;
+}
+
+/* Subtle animations */
+.glass-card, .btn, .form-control, .form-select {
+    transition: all 0.3s ease;
+}
+
+/* Badge styling */
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.6em;
+    border-radius: 4px;
 }

@@ -7,6 +7,16 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
 
+# Import user CRUD operations
+from app.user_crud import (
+    create_user,
+    get_user_by_id,
+    get_user_by_username,
+    get_user_by_email,
+    update_user,
+    deactivate_user
+)
+
 # --- Helper for stg table management ---
 
 def _get_stg_table_name_str(script_id: int) -> str:

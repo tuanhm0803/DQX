@@ -1,0 +1,4 @@
+<!-- dropdown_options.html - A partial template for rendering dropdown options -->
+{% for option in options %}
+    <option value="{{ option }}" {% if option == selected %}selected{% endif %}>{{ option }}</option>
+{% endfor %}

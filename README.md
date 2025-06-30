@@ -17,16 +17,13 @@ A FastAPI application for exploring and querying databases with a web interface.
 2. Install dependencies: `pip install -r requirements.txt`
 3. Run the application: `python -m app.main`
 
-## Chat Logging
+## Reference Tables
 
-The application includes a comprehensive chat logging system that allows you to record and analyze conversations between users and assistants.
+The application includes reference tables management for rules and sources. Access this functionality via the UI at `/references`, where you can:
 
-### Logging Methods
-
-1. **Web UI**: Access the user-friendly interface at `/chat_logger`
-2. **REST API**: Use the endpoint at `/api/log_chat` for programmatic logging
-3. **Command-line Tool**: Run `python utils/log_chat_cli.py --user "User message" --assistant "Assistant response"`
-4. **Python API**: Import directly in your code with `from utils.logger import log_chat`
+1. **View**: See all existing rule and source reference records
+2. **Add**: Create new rule and source reference records with forms
+3. **Delete**: Remove existing rule and source reference records as needed
 
 ### Advanced Features
 

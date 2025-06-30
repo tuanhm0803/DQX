@@ -1,0 +1,26 @@
+<!-- User Navigation Bar -->
+<div class="container mt-2 mb-4 flex justify-between items-center">
+    <div>
+        <a href="/" class="text-lg font-bold text-blue-500">DQX</a>
+    </div>
+    <div class="flex items-center">
+        {% if current_user %}
+            <a href="/visualization" class="btn btn-outline-info me-2" style="border-radius: 8px;">
+                <i class="bi bi-graph-up"></i> Visualizations
+            </a>
+            <a href="/profile" class="btn btn-outline-secondary me-2" style="border-radius: 8px;">
+                <i class="bi bi-person-circle"></i> {{ current_user.username }}
+            </a>
+            <a href="/logout" class="btn btn-outline-danger" style="border-radius: 8px;">
+                <i class="bi bi-box-arrow-right"></i> Logout
+            </a>
+        {% else %}
+            <a href="/login" class="btn btn-outline-primary me-2" style="border-radius: 8px;">
+                <i class="bi bi-box-arrow-in-right"></i> Login
+            </a>
+            <a href="/register" class="btn btn-outline-success" style="border-radius: 8px;">
+                <i class="bi bi-person-plus"></i> Register
+            </a>
+        {% endif %}
+    </div>
+</div>

@@ -29,3 +29,27 @@ class SQLScript:
         self.content = content
         self.created_at = created_at
         self.updated_at = updated_at
+
+class User:
+    """User model for authentication"""
+    id: int
+    username: str
+    email: str
+    full_name: Optional[str]
+    hashed_password: str
+    is_active: bool
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    def __init__(self, username: str, email: str, hashed_password: str, 
+                full_name: Optional[str] = None, id: Optional[int] = None,
+                is_active: bool = True, created_at: Optional[datetime] = None, 
+                updated_at: Optional[datetime] = None):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.full_name = full_name
+        self.hashed_password = hashed_password
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at

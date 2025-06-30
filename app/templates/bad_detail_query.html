@@ -3,72 +3,101 @@
 <head>
     <meta charset="UTF-8">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DQX - Query Bad Details</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
 </head>
-<body class="font-sans">    <div class="container mt-4 mb-4 text-end">
-        <a href="/visualization{% if rule_id %}?rule_id={{ rule_id }}{% if source_id %}&source_id={{ source_id }}{% endif %}{% elif source_id %}?source_id={{ source_id }}{% endif %}" 
-           class="btn btn-outline-info me-2" style="border-radius: 8px;">
-            <i class="bi bi-graph-up"></i> View Visualizations
-        </a>
-        <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
-            <i class="bi bi-house-door"></i> Back to Main Page
-        </a>
-    </div>
-    <div class="container mx-auto p-8">
-        <div class="glass-card p-6 mb-8">
-            <h1 class="text-4xl font-bold mb-4 text-center">DQ Errors query</h1>
+<body>
+    {% include "partials/main_nav.html" %}
+    
+    <div class="container mt-5 pt-3">
+        <div class="mt-4 mb-4 text-end">
+            <a href="/visualization{% if rule_id %}?rule_id={{ rule_id }}{% if source_id %}&source_id={{ source_id }}{% endif %}{% elif source_id %}?source_id={{ source_id }}{% endif %}" 
+               class="btn btn-outline-info me-2">
+                <i class="bi bi-graph-up"></i> View Visualizations
+            </a>
+            <a href="/" class="btn btn-outline-primary">
+                <i class="bi bi-house-door"></i> Back to Main Page
+            </a>
+        </div>
+        <div class="glass-card p-4 mb-4 shadow">
+            <h1 class="h2 mb-3 text-center">DQ Errors Query</h1>
         </div>
 
-        <div class="glass-card p-6">
-            <h2 class="text-2xl font-bold mb-4">Filters</h2>            <form method="get">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">                    <select name="rule_id" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">-- Select Rule ID --</option>
-                        <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
-                        {% if rule_ids %}
-                            {% for id in rule_ids %}
-                                <option value="{{ id }}" {% if id == rule_id %}selected{% endif %}>{{ id }}</option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="" disabled>(no rule IDs available)</option>
-                        {% endif %}
-                    </select>                    <select name="source_id" class="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">-- Select Source ID --</option>
-                        <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
-                        {% if source_ids %}
-                            {% for id in source_ids %}
-                                <option value="{{ id }}" {% if id == source_id %}selected{% endif %}>{{ id }}</option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="" disabled>(no source IDs available)</option>
-                        {% endif %}
-                    </select>
-                    <div class="flex space-x-2">
-                        <button type="submit" class="flex-1 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300">
-                            <i class="bi bi-search mr-1"></i> Query Data
+        <div class="glass-card p-4 mb-4 shadow">
+            <h2 class="h4 mb-3">Filters</h2>            
+            <form method="get" action="/bad_detail_query">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4 mb-3">
+                        <div class="mb-3">
+                            <label for="rule-search" class="form-label">Search Rule ID:</label>
+                            <input type="text" id="rule-search" class="form-control"
+                                   placeholder="Type to search rules..."
+                                   name="search_term"
+                                   value="{{ search_term or '' }}">
+                        </div>
+                        <select name="rule_id" id="rule-select" class="form-select">
+                            <option value="">-- Select Rule ID --</option>
+                            <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
+                            {% if rule_ids %}
+                                {% for id in rule_ids %}
+                                    <option value="{{ id }}" {% if id == rule_id %}selected{% endif %}>{{ id }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="" disabled>(no rule IDs available)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="mb-3">
+                            <label for="source-search" class="form-label">Search Source ID:</label>
+                            <input type="text" id="source-search" 
+                                   class="form-control"
+                                   placeholder="Type to search sources..."
+                                   name="search_term"
+                                   value="{{ search_term or '' }}">
+                        </div>
+                        <select name="source_id" id="source-select" class="form-select">
+                            <option value="">-- Select Source ID --</option>
+                            <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
+                            {% if source_ids %}
+                                {% for id in source_ids %}
+                                    <option value="{{ id }}" {% if id == source_id %}selected{% endif %}>{{ id }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="" disabled>(no source IDs available)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-fill">
+                            <i class="bi bi-search me-1"></i> Query Data
                         </button>
-                        <a href="/bad_detail_query" class="flex-1 bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition duration-300 text-center">
-                            <i class="bi bi-x-circle mr-1"></i> Clear Filters
+                        <a href="/bad_detail_query" class="btn btn-secondary flex-fill">
+                            <i class="bi bi-x-circle me-1"></i> Clear Filters
                         </a>
                     </div>
                 </div>
             </form>
 
-            <h2 class="text-2xl font-bold mb-4 mt-8">Results {% if data %}<span class="text-sm font-normal text-gray-400">({{ data|length }} rows)</span>{% endif %}</h2>
+            <h2 class="h4 mb-4 mt-5">Results {% if data %}<span class="small text-muted">({{ total_records }} rows{% if total_records > data|length %}, showing {{ data|length }}{% endif %})</span>{% endif %}</h2>
             
             {% if rule_id or source_id %}
-            <div class="mb-4 p-3 bg-blue-900/30 rounded">
-                <p class="text-sm text-gray-300">
+            <div class="mb-4 p-3 bg-light rounded">
+                <p class="small">
                     <i class="bi bi-filter"></i> Filters applied:
-                    {% if rule_id %}<span class="badge bg-blue-500 text-white px-2 py-1 rounded mr-2">Rule ID: {{ rule_id }}</span>{% endif %}
-                    {% if source_id %}<span class="badge bg-blue-500 text-white px-2 py-1 rounded">Source ID: {{ source_id }}</span>{% endif %}
+                    {% if rule_id %}<span class="badge bg-primary me-2">Rule ID: {{ rule_id }}</span>{% endif %}
+                    {% if source_id %}<span class="badge bg-primary">Source ID: {{ source_id }}</span>{% endif %}
                 </p>
             </div>
-            {% endif %}            <div class="overflow-x-auto">
+            {% endif %}
+            
+            <div class="overflow-x-auto">
                 {% if rule_id or source_id %}
                     {% if headers %}
-                        <table class="min-w-full">
+                        <table class="table table-striped table-hover">
                             <thead>
                                 <tr>
                                     {% for header in headers %}
@@ -86,18 +115,50 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+                        
+                        {% if total_pages > 1 %}
+                        <div class="d-flex justify-content-center mt-4">
+                            <nav aria-label="Page navigation">
+                                <ul class="pagination">
+                                    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                                        <a class="page-link" href="?rule_id={{ rule_id or '' }}&source_id={{ source_id or '' }}&page=1">
+                                            First
+                                        </a>
+                                    </li>
+                                    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                                        <a class="page-link" href="?rule_id={{ rule_id or '' }}&source_id={{ source_id or '' }}&page={{ page - 1 }}">
+                                            &laquo;
+                                        </a>
+                                    </li>
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page }} of {{ total_pages }}</span>
+                                    </li>
+                                    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                                        <a class="page-link" href="?rule_id={{ rule_id or '' }}&source_id={{ source_id or '' }}&page={{ page + 1 }}">
+                                            &raquo;
+                                        </a>
+                                    </li>
+                                    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                                        <a class="page-link" href="?rule_id={{ rule_id or '' }}&source_id={{ source_id or '' }}&page={{ total_pages }}">
+                                            Last
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                        {% endif %}
                     {% else %}
-                        <div class="text-center p-10 bg-gray-800/50 rounded">
-                            <i class="bi bi-search text-4xl text-gray-500"></i>
-                            <p class="mt-2 text-gray-400">No results found for your search criteria</p>
-                            <p class="text-sm text-gray-500 mt-1">Try selecting different filter options</p>
+                        <div class="text-center p-4 bg-light rounded">
+                            <i class="bi bi-search fs-1 text-muted"></i>
+                            <p class="mt-2 text-muted">No results found for your search criteria</p>
+                            <p class="small text-muted mt-1">Try selecting different filter options</p>
                         </div>
                     {% endif %}
                 {% else %}
-                    <div class="text-center p-10 bg-gray-800/50 rounded">
-                        <i class="bi bi-funnel text-4xl text-gray-500"></i>
-                        <p class="mt-2 text-gray-400">Select filters above to query data</p>
-                        <p class="text-sm text-gray-500 mt-1">Results will appear here once you apply filters</p>
+                    <div class="text-center p-4 bg-light rounded">
+                        <i class="bi bi-funnel fs-1 text-muted"></i>
+                        <p class="mt-2 text-muted">Select filters above to query data</p>
+                        <p class="small text-muted mt-1">Results will appear here once you apply filters</p>
                     </div>
                 {% endif %}
             </div>
@@ -105,71 +166,39 @@
     </div>
 
     <script>
-        // Function to make dropdowns searchable
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the select elements
-            const ruleIdSelect = document.querySelector('select[name="rule_id"]');
-            const sourceIdSelect = document.querySelector('select[name="source_id"]');
+            // Setup search inputs to filter the dropdowns using server-side filtering
+            const ruleSearch = document.getElementById('rule-search');
+            const sourceSearch = document.getElementById('source-search');
             
-            // Add event listeners for keyboard navigation
-            if (ruleIdSelect) {
-                enhanceDropdown(ruleIdSelect);
-            }
-            
-            if (sourceIdSelect) {
-                enhanceDropdown(sourceIdSelect);
-            }
-        });
-
-        function enhanceDropdown(selectElement) {
-            // Add keyup event for filtering options
-            selectElement.addEventListener('keyup', function(e) {
-                const searchText = e.target.value.toLowerCase();
+            // Function to handle server-side search and update dropdown options
+            function setupSearch(searchInput, selectElement, fieldName) {
+                if (!searchInput || !selectElement) return;
                 
-                // Skip navigation keys
-                if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
-                    return;
-                }
-                
-                // Get all options except the first one (placeholder)
-                const options = Array.from(selectElement.options).slice(1);
-                
-                // Track if we found any matches
-                let foundMatch = false;
-                
-                // Filter options based on input text
-                options.forEach(option => {
-                    const optionText = option.text.toLowerCase();
-                    if (optionText.includes(searchText)) {
-                        option.style.display = '';
-                        foundMatch = true;
-                    } else {
-                        option.style.display = 'none';
+                // Disable the default dropdown keyboard search behavior
+                selectElement.addEventListener('keydown', function(e) {
+                    if (e.key.length === 1) { // Only for character keys
+                        e.preventDefault();
                     }
                 });
                 
-                // If we have a match and a key other than navigation was pressed,
-                // open the dropdown to show the filtered options
-                if (foundMatch && !['Tab'].includes(e.key)) {
-                    selectElement.size = Math.min(10, options.length);
-                    selectElement.focus();
-                }
-            });
+                // Use server-side search instead of client-side filtering
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.trim();
+                    
+                    // Submit the form with the search parameter
+                    if (searchTerm.length >= 2) { // Only search if at least 2 characters
+                        const form = this.closest('form');
+                        form.action = "/bad_detail_query?search_term=" + encodeURIComponent(searchTerm);
+                        form.submit();
+                    }
+                });
+            }
             
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(e) {
-                if (e.target !== selectElement) {
-                    selectElement.size = 1;
-                }
-            });
-            
-            // Close dropdown on blur
-            selectElement.addEventListener('blur', function() {
-                setTimeout(() => {
-                    selectElement.size = 1;
-                }, 200);
-            });
-        }
+            // Setup search for rule_id and source_id dropdowns
+            setupSearch(ruleSearch, document.getElementById('rule-select'), 'rule_id');
+            setupSearch(sourceSearch, document.getElementById('source-select'), 'source_id');
+        });
     </script>
 </body>
 </html>

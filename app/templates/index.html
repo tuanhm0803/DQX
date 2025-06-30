@@ -10,34 +10,7 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="/">D<span>QX</span></a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/editor">SQL Editor</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/docs" target="_blank">API Docs</a>
-                    </li>                    <li class="nav-item">
-                        <a class="nav-link" href="/bad_detail_query">DQ Errors Query</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/visualization">DQ Visualization</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/chat_logger">Chat Logger</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    {% include "partials/main_nav.html" %}
 
     <!-- Hero Section -->
     <header class="hero text-center">
@@ -102,14 +75,18 @@
                     </div>
                 </a>
             </div>
+        </div>
+        
+        <!-- Second row of features -->
+        <div class="row">
             <div class="col-md-4 mb-4">
-                <a href="/chat_logger" class="card-link">
+                <a href="/references/" class="card-link">
                     <div class="feature-card">
                         <div class="feature-icon">
-                            <i class="bi bi-chat-text"></i>
+                            <i class="bi bi-table"></i>
                         </div>
-                        <h3>Chat Logger</h3>
-                        <p>Log and archive conversations between users and assistants for future reference.</p>
+                        <h3>Reference Tables</h3>
+                        <p>Manage rule and source reference data to maintain organization of your data quality checks.</p>
                     </div>
                 </a>
             </div>

@@ -4,7 +4,7 @@ from typing import List, Optional
 from app import crud, schemas
 from app.database import get_db
 from psycopg2.extensions import connection as PgConnection
-from app.dependencies import templates
+from app.dependencies import templates, render_template
 
 # Router for API endpoints
 api_router = APIRouter()
@@ -16,11 +16,20 @@ page_router = APIRouter()
 
 @page_router.get("/editor", response_class=HTMLResponse)
 async def sql_editor_page(request: Request, script_id: Optional[int] = None, db: PgConnection = Depends(get_db)):
+    # Fix for the decode attribute error by properly checking and converting script_id
+    if script_id is not None:
+        if isinstance(script_id, bytes):
+            script_id = script_id.decode('utf-8')
+        try:
+            script_id = int(script_id)
+        except (ValueError, TypeError):
+            script_id = None
+            
     scripts = crud.get_sql_scripts(db)
     selected_script = None
     if script_id:
         selected_script = crud.get_sql_script(db, script_id)
-    return templates.TemplateResponse("sql_editor.html", {
+    return render_template("sql_editor.html", {
         "request": request, 
         "scripts": scripts, 
         "selected_script": selected_script,
@@ -64,7 +73,7 @@ async def execute_script_form(
         error = str(e)
     
     # Re-render the editor page with results or an error
-    return templates.TemplateResponse("sql_editor.html", {
+    return render_template("sql_editor.html", {
         "request": request, 
         "scripts": scripts, 
         "selected_script": {"content": content}, # Pass back the executed script

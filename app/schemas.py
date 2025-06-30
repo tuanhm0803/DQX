@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -58,3 +58,39 @@ class Schedule(ScheduleBase):
 
     class Config:
         orm_mode = True
+        
+# --- User Authentication Schemas ---
+
+class UserBase(BaseModel):
+    username: str
+    email: str = Field(..., description="User email address")
+    full_name: Optional[str] = None
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=8, description="User password, minimum 8 characters")
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserInDB(UserBase):
+    id: int
+    hashed_password: str
+    is_active: bool = True
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class User(UserBase):
+    id: int
+    is_active: bool
+
+    class Config:
+        orm_mode = True
+
+class TokenData(BaseModel):
+    username: Optional[str] = None

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from app.database import get_db
 from app import crud
-from app.dependencies import templates
+from app.dependencies import templates, render_template
 from psycopg2.extensions import connection as PgConnection
 from datetime import datetime, timedelta
 
@@ -139,7 +139,7 @@ async def visualization_page(request: Request, rule_id: str = None, source_id: s
     except Exception as e:
         print(f"Error executing query: {str(e)}")
     
-    return templates.TemplateResponse("visualization.html", {
+    return render_template("visualization.html", {
         "request": request, 
         "rule_ids": rule_ids,
         "source_ids": source_ids,

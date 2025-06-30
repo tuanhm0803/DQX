@@ -1,0 +1,54 @@
+<!-- Main Navigation Bar -->
+<nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+    <div class="container">
+        <a class="navbar-brand" href="/">D<span>QX</span></a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/editor' in request.url.path %}active{% endif %}" href="/editor">SQL Editor</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/bad_detail_query' in request.url.path %}active{% endif %}" href="/bad_detail_query">DQ Errors Query</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/visualization' in request.url.path %}active{% endif %}" href="/visualization">DQ Visualization</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/references' in request.url.path %}active{% endif %}" href="/references">Reference Tables</a>
+                </li>
+                {% if current_user %}
+                <li class="nav-item">
+                    <a class="nav-link {% if '/profile' in request.url.path %}active{% endif %}" href="/profile">
+                        <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/logout">
+                        <i class="bi bi-box-arrow-right me-1"></i> Logout
+                    </a>
+                </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link {% if '/login' in request.url.path %}active{% endif %}" href="/login">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Login
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/register' in request.url.path %}active{% endif %}" href="/register">
+                        <i class="bi bi-person-plus me-1"></i> Register
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>

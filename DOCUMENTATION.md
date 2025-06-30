@@ -185,10 +185,9 @@ The `logger.py` module provides comprehensive chat logging capabilities:
     *   Error handling to ensure logging stability
 
 *   **Integration Points**:
-    *   Web UI (`/chat_logger`) for manual log entry
-    *   REST API endpoint (`/api/log_chat`) for programmatic logging
-    *   Command-line script (`utils/log_chat_cli.py`) for direct logging from the terminal
-    *   Python API for direct integration into application code
+    *   Web UI (`/references`) for rule and source reference tables management
+    *   Direct database access via SQL for advanced integrations
+    *   Browser-based interface for viewing, adding and deleting reference data
 
 *   **Example Usage**:
     ```python

@@ -10,19 +10,24 @@
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
 </head>
 <body>
-    <div class="container mt-4 mb-4 text-end">
-        <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
-            <i class="bi bi-house-door"></i> Back to Main Page
-        </a>
-    </div>
-    <div class="container">
-        <h1 class="mb-4">DQ Rule Editor</h1>
+    {% include "partials/main_nav.html" %}
+    
+    <div class="container mt-5 pt-3">
+        <!-- Back button can stay but moved down to accommodate fixed navbar -->
+        <div class="mt-4 mb-4 text-end">
+            <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
+                <i class="bi bi-house-door"></i> Back to Main Page
+            </a>
+        </div>
+        <div class="glass-card p-4 mb-4 shadow">
+            <h1 class="h2 mb-3 text-center">DQ Rule Editor</h1>
+        </div>
 
         <div class="row">
             <!-- Unified Block: Script List and Editor -->
             <div class="col-md-4">
-                <div class="script-list mb-3">
-                    <h5>Saved Scripts</h5>
+                <div class="glass-card p-4 mb-4 shadow">
+                    <h2 class="h4 mb-3">Saved Scripts</h2>
                     <div class="list-group">
                         <a href="/editor" class="list-group-item list-group-item-action {% if not selected_script %}active{% endif %}">New Script</a>
                         {% for script in scripts %}
@@ -33,7 +38,7 @@
             </div>
 
             <div class="col-md-8">
-                <form method="post">
+                <form method="post" class="glass-card p-4 mb-4 shadow">
                     <div class="editor-container">
                         <input type="hidden" name="script_id" value="{{ selected_script.id if selected_script else '' }}">
                         <div class="mb-3">
@@ -94,6 +99,7 @@
                 </div>
                 {% endif %}
             </div>
+        </div>
         </div>
     </div>
 

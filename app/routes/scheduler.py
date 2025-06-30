@@ -4,7 +4,7 @@ from typing import List
 from app import crud, schemas
 from app.database import get_db
 from psycopg2.extensions import connection as PgConnection
-from app.dependencies import templates
+from app.dependencies import templates, render_template
 
 router = APIRouter()
 
@@ -12,7 +12,7 @@ router = APIRouter()
 def list_schedules(request: Request, db: PgConnection = Depends(get_db)):
     schedules = crud.get_schedules(db)
     scripts = crud.get_sql_scripts(db)
-    return templates.TemplateResponse("scheduler.html", {"request": request, "schedules": schedules, "scripts": scripts, "form_title": "Create New Schedule"})
+    return render_template("scheduler.html", {"request": request, "schedules": schedules, "scripts": scripts, "form_title": "Create New Schedule"})
 
 @router.post("/schedules/")
 def create_schedule_form(
@@ -52,7 +52,7 @@ def edit_schedule_form(schedule_id: int, request: Request, db: PgConnection = De
         raise HTTPException(status_code=404, detail="Schedule not found")
     schedules = crud.get_schedules(db)
     scripts = crud.get_sql_scripts(db)
-    return templates.TemplateResponse("scheduler.html", {"request": request, "schedule": schedule, "schedules": schedules, "scripts": scripts, "form_title": "Edit Schedule"})
+    return render_template("scheduler.html", {"request": request, "schedule": schedule, "schedules": schedules, "scripts": scripts, "form_title": "Edit Schedule"})
 
 @router.get("/schedules/delete/{schedule_id}")
 def delete_schedule_form(schedule_id: int, db: PgConnection = Depends(get_db)):
