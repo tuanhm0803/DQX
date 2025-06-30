@@ -12,6 +12,9 @@ api_router = APIRouter()
 # Router for HTML pages
 page_router = APIRouter()
 
+# Constants
+SQL_EDITOR_TEMPLATE = "sql_editor.html"
+
 # --- Page Endpoints ---
 
 @page_router.get("/editor", response_class=HTMLResponse)
@@ -29,7 +32,7 @@ async def sql_editor_page(request: Request, script_id: Optional[int] = None, db:
     selected_script = None
     if script_id:
         selected_script = crud.get_sql_script(db, script_id)
-    return render_template("sql_editor.html", {
+    return render_template(SQL_EDITOR_TEMPLATE, {
         "request": request, 
         "scripts": scripts, 
         "selected_script": selected_script,
@@ -73,7 +76,7 @@ async def execute_script_form(
         error = str(e)
     
     # Re-render the editor page with results or an error
-    return render_template("sql_editor.html", {
+    return render_template(SQL_EDITOR_TEMPLATE, {
         "request": request, 
         "scripts": scripts, 
         "selected_script": {"content": content}, # Pass back the executed script
@@ -85,6 +88,81 @@ async def execute_script_form(
 async def delete_script_form(script_id: int, db: PgConnection = Depends(get_db)):
     crud.delete_sql_script(db, script_id)
     return RedirectResponse(url="/editor", status_code=303)
+
+# Add populate and publish page routes
+@page_router.get("/editor/{script_id}/populate")
+async def populate_table_form(request: Request, script_id: int, db: PgConnection = Depends(get_db)):
+    try:
+        # Get script name for better messaging
+        selected_script = crud.get_sql_script(db, script_id)
+        script_name = selected_script.get("name", f"Script #{script_id}")
+        
+        # Execute the populate function
+        result = crud.populate_script_result_table(db, script_id)
+        
+        # Get all scripts for page rendering
+        scripts = crud.get_sql_scripts(db)
+        
+        # Success message with row count if available
+        success_message = f"Successfully populated staging table with data from '{script_name}'."
+        if result and "rows_affected" in result:
+            success_message += f" {result['rows_affected']} rows processed."
+        
+        return render_template(SQL_EDITOR_TEMPLATE, {
+            "request": request, 
+            "scripts": scripts, 
+            "selected_script": selected_script,
+            "results": None,
+            "success": success_message
+        })
+    except Exception as e:
+        # Get all scripts for error page rendering
+        scripts = crud.get_sql_scripts(db)
+        selected_script = crud.get_sql_script(db, script_id)
+        return render_template(SQL_EDITOR_TEMPLATE, {
+            "request": request, 
+            "scripts": scripts, 
+            "selected_script": selected_script,
+            "results": None,
+            "error": f"Failed to populate table: {str(e)}"
+        })
+
+@page_router.get("/editor/{script_id}/publish")
+async def publish_results_form(request: Request, script_id: int, db: PgConnection = Depends(get_db)):
+    try:
+        # Get script name for better messaging
+        selected_script = crud.get_sql_script(db, script_id)
+        script_name = selected_script.get("name", f"Script #{script_id}")
+        
+        # Execute the publish function
+        result = crud.publish_script_results(db, script_id)
+        
+        # Get all scripts for page rendering
+        scripts = crud.get_sql_scripts(db)
+        
+        # Success message with row count if available
+        success_message = f"Successfully published results from '{script_name}' to production table."
+        if result and "rows_affected" in result:
+            success_message += f" {result['rows_affected']} rows moved to production."
+        
+        return render_template(SQL_EDITOR_TEMPLATE, {
+            "request": request, 
+            "scripts": scripts, 
+            "selected_script": selected_script,
+            "results": None,
+            "success": success_message
+        })
+    except Exception as e:
+        # Get all scripts for error page rendering
+        scripts = crud.get_sql_scripts(db)
+        selected_script = crud.get_sql_script(db, script_id)
+        return render_template(SQL_EDITOR_TEMPLATE, {
+            "request": request, 
+            "scripts": scripts, 
+            "selected_script": selected_script,
+            "results": None,
+            "error": f"Failed to publish results: {str(e)}"
+        })
 
 # --- API Endpoints ---
 
@@ -120,3 +198,27 @@ def execute_script(request: schemas.SQLExecuteRequest, db: PgConnection = Depend
         return crud.execute_query(request.script_content, db)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# Add populate and publish endpoints
+@api_router.post("/{script_id}/populate_table")
+def populate_table(script_id: int, db: PgConnection = Depends(get_db)):
+    """Populate the staging table for a specific SQL script"""
+    try:
+        result = crud.populate_script_result_table(db, script_id)
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=f"Failed to populate table for script {script_id}: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@api_router.post("/{script_id}/publish")
+def publish_results(script_id: int, db: PgConnection = Depends(get_db)):
+    """Publish results from the script's staging table to the main bad_detail table."""
+    try:
+        result = crud.publish_script_results(db, script_id)
+        return result
+    except Exception as e:
+        if isinstance(e, ValueError):
+            raise HTTPException(status_code=400, detail=f"Failed to publish results for script {script_id}: {str(e)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while publishing results for script {script_id}: {str(e)}")

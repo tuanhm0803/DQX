@@ -53,16 +53,44 @@
                             <label for="sqlEditor" class="form-label">SQL Script</label>
                             <textarea id="sqlEditor" name="content">{{ selected_script.content if selected_script else '' }}</textarea>
                         </div>
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <button type="submit" formaction="/editor/execute" class="btn btn-primary me-2">Execute</button>
-                                <button type="submit" formaction="/editor/save" class="btn btn-success me-2">Save</button>
-                            </div>
-                            <div>
+                        <div class="row g-3 mt-3">
+                            <div class="col-12 d-flex flex-wrap">
+                                <!-- Basic operations -->
+                                <div class="me-auto mb-2">
+                                    <button type="submit" formaction="/editor/execute" class="btn btn-primary me-2">Execute</button>
+                                    <button type="submit" formaction="/editor/save" class="btn btn-success me-2">Save</button>
+                                    
+                                    {% if selected_script %}
+                                    <a href="/editor/delete/{{ selected_script.id }}" class="btn btn-danger" 
+                                       onclick="return confirm('Are you sure you want to delete this script?')">Delete</a>
+                                    {% endif %}
+                                </div>
+                            
+                                <!-- DQ operations only shown for saved scripts -->
                                 {% if selected_script %}
-                                <a href="/editor/delete/{{ selected_script.id }}" class="btn btn-danger">Delete</a>
+                                <div class="mb-2">
+                                    <fieldset class="d-inline-block ms-2">
+                                        <legend class="visually-hidden">Data Operations</legend>
+                                        <a href="/editor/{{ selected_script.id }}/populate" class="btn btn-info">Populate</a>
+                                        <a href="/editor/{{ selected_script.id }}/publish" class="btn btn-warning"
+                                           onclick="return confirm('Are you sure you want to publish the results? This will move data from staging to production.')">Publish</a>
+                                    </fieldset>
+                                </div>
                                 {% endif %}
                             </div>
+
+                            {% if selected_script %}
+                            <div class="col-12">
+                                <div class="alert alert-info small">
+                                    <strong>Data Pipeline:</strong> 
+                                    <ul class="mb-0">
+                                        <li>First click <strong>Populate</strong> to run the SQL and store results in the staging table.</li>
+                                        <li>Then click <strong>Publish</strong> to move data from staging to the bad_detail table.</li>
+                                        <li>The page will refresh after each operation with status updates.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </form>
@@ -95,7 +123,13 @@
 
                 {% if error %}
                 <div class="alert alert-danger mt-4" role="alert">
-                  {{ error }}
+                  <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ error }}
+                </div>
+                {% endif %}
+                
+                {% if success %}
+                <div class="alert alert-success mt-4" role="alert">
+                  <i class="bi bi-check-circle-fill me-2"></i> {{ success }}
                 </div>
                 {% endif %}
             </div>
