@@ -9,21 +9,43 @@ DQX is a FastAPI application designed to provide a web-based interface for inter
 ```
 DQX/
 ├── README.md
+├── DOCUMENTATION.md
 ├── requirements.txt
 ├── app/
 │   ├── __init__.py
 │   ├── crud.py             # Core database interaction logic (Create, Read, Update, Delete) using psycopg2
 │   ├── database.py         # Database connection management using psycopg2
 │   ├── main.py             # FastAPI application entry point, middleware, and root routes
-│   ├── models.py           # (Largely refactored, no longer contains SQLAlchemy ORM models)
+│   ├── models.py           # Data models for the application
 │   ├── schemas.py          # Pydantic models for data validation and serialization
+│   ├── auth.py             # Authentication and authorization logic
+│   ├── dependencies.py     # Shared dependencies for routes
+│   ├── dependencies_auth.py # Authentication-related dependencies
 │   ├── routes/
+│   │   ├── auth.py         # Authentication routes (login, registration)
+│   │   ├── bad_detail.py   # Routes for bad detail query functionality
 │   │   ├── query.py        # API routes for executing custom SQL queries
+│   │   ├── reference_tables.py # Routes for managing rule and source references
+│   │   ├── scheduler.py    # Routes for job scheduling
 │   │   ├── sql_scripts.py  # API routes for managing and executing saved SQL scripts
+│   │   ├── stats.py        # Routes for statistics and visualization
 │   │   └── tables.py       # API routes for table browsing, data manipulation
-│   └── static/
+│   ├── static/
+│   │   ├── css/
+│   │   │   └── style.css   # Shared CSS styles for consistent UI
+│   │   └── js/             # JavaScript files
+│   └── templates/
 │       ├── index.html      # Main landing page
+│       ├── bad_detail_query.html # Bad detail query interface
+│       ├── visualization.html    # Data visualization interface
+│       ├── scheduler.html  # Job scheduler interface
+│       ├── reference_tables.html # Reference tables management
+│       ├── partials/       # Reusable template components
 │       └── sql_editor.html # SQL editor interface
+└── utils/
+    ├── __init__.py
+    ├── create_tables.py    # Utility to create database tables
+    └── create_users_table.py # Utility to create user authentication tables
 ```
 
 ## Core Components
@@ -117,10 +139,74 @@ DQX/
         *   **Note**: The `script_id` must correspond to an existing SQL script, and the request body should specify the database connection details if not using the default.
     *   `publish_results(script_id: int, ...)`: Mapped to `POST /{script_id}/publish`. This endpoint triggers the `crud.publish_script_results` function. It takes the data from the script's staging table (`stg.dq_script_{id}`) and merges it into the central `dq.bad_detail` table. For each unique `(rule_id, source_id)` pair, it deletes existing records before inserting the new ones.
 
+### 4. `app/routes/bad_detail.py`
+
+*   **Purpose**: Provides a user-friendly interface for filtering and viewing bad detail records.
+*   **Key Components**:
+    *   `app/routes/bad_detail.py`: Contains endpoints for retrieving and filtering bad detail data.
+    *   `app/templates/bad_detail_query.html`: Frontend template with filtering UI and results display.
+*   **Key Features**:
+    *   Filtering by rule_id and source_id with descriptive dropdowns showing both ID and name
+    *   Pagination for large result sets
+    *   Integration with visualization tools
+
+### 5. `app/routes/stats.py`
+
+*   **Purpose**: Provides graphical representation of bad detail data for easier analysis.
+*   **Key Components**:
+    *   `app/routes/stats.py`: Contains endpoints for generating visualization data.
+    *   `app/templates/visualization.html`: Frontend template with Chart.js visualizations.
+*   **Key Features**:
+    *   Bad detail counts by date (line chart)
+    *   Bad detail counts by rule (bar chart)
+    *   Bad detail counts by source (bar chart)
+    *   Filtering by rule_id and source_id with descriptive dropdowns
+
+### 6. `app/routes/scheduler.py`
+
+*   **Purpose**: Allows scheduling SQL scripts to run at specific intervals.
+*   **Key Components**:
+    *   `app/routes/scheduler.py`: Contains endpoints for managing job schedules.
+    *   `app/templates/scheduler.html`: Frontend interface for schedule management.
+*   **Key Features**:
+    *   Support for daily, weekly, and monthly schedules
+    *   Cron-based scheduling (using standard cron format)
+    *   Active/inactive status toggling
+    *   Integration with SQL scripts
+
+### 7. `app/routes/reference_tables.py`
+
+*   **Purpose**: Provides an interface for managing rule and source reference tables.
+*   **Key Components**:
+    *   `app/routes/reference_tables.py`: Contains endpoints for CRUD operations on reference tables.
+    *   `app/templates/reference_tables.html`: Frontend interface for managing references.
+*   **Key Features**:
+    *   Add, view, and delete rule references
+    *   Add, view, and delete source references
+    *   Integration with bad detail query and visualization for improved data display
+
+### 8. `app/auth.py`
+
+*   **Purpose**: Provides user authentication and authorization capabilities.
+*   **Key Components**:
+    *   `app/auth.py`: Core authentication logic.
+    *   `app/dependencies_auth.py`: Authentication-related dependencies for routes.
+    *   `app/routes/auth.py`: API routes for login, registration, and user management.
+*   **Key Features**:
+    *   JWT-based token authentication
+    *   Password hashing for security
+    *   Login/logout functionality
+    *   User profile management
+
 ## Frontend (`app/static/`)
 
 *   `index.html`: The main landing page for the application.
 *   `sql_editor.html`: Provides a user interface for writing, saving, and executing SQL scripts. It now includes a "Populate" button for each saved script, which calls the `POST /{script_id}/populate_table` endpoint to refresh the data in its dedicated staging table. It also includes a "Publish" button to move the data from the staging table to the final `dq.bad_detail` table.
+*   `bad_detail_query.html`: Frontend template for the bad detail query interface, allowing users to filter and view bad detail records.
+*   `visualization.html`: Frontend template for data visualization, showing charts and graphs of bad detail data.
+*   `scheduler.html`: Frontend interface for managing scheduled jobs for SQL scripts.
+*   `reference_tables.html`: Frontend interface for managing rule and source reference tables.
+*   `partials/`: Directory containing reusable template components, such as the navigation bar.
 
 ## Setup and Running
 
@@ -160,9 +246,11 @@ DQX/
 *   **Staging Table Automation**: For each validated SQL script, the application automatically manages a corresponding staging table in the `stg` schema. This allows the results of any script to be materialized into a persistent, queryable table that can be refreshed on demand.
 *   **Publishing Workflow**: A two-step process allows for safe data validation. First, results are loaded into a temporary staging table using the "Populate" button. After verification, the "Publish" button merges these results into the final `dq.bad_detail` table. The merge logic is idempotent based on `(rule_id, source_id)` pairs, providing a controlled and reliable way to update production data quality records.
 *   **Separation of Concerns**: The project maintains a structure with separate modules for database connection (`database.py`), data schemas (`schemas.py`), CRUD operations (`crud.py`), and API routing (`routes/`).
-*   **Error Handling**: Global exception handling in `main.py` ensures that all unhandled backend errors return a JSON response. Frontend JavaScript in `sql_editor.html` includes robust error handling for API calls.
-*   **Scheduler**: A new feature allows users to schedule SQL scripts to run at daily, weekly, or monthly intervals. This is managed through a new UI and a set of API endpoints.
-*   **Modern UI**: The frontend has been refactored to use a shared CSS stylesheet, providing a consistent and modern look and feel across all pages.
+*   **Error Handling**: Global exception handling in `main.py` ensures that all unhandled backend errors return a JSON response. Frontend JavaScript in all templates includes robust error handling for API calls.
+*   **Scheduler**: Users can schedule SQL scripts to run at daily, weekly, or monthly intervals. This is managed through a dedicated scheduler UI and a set of API endpoints. Job scheduling uses cron expressions for flexibility.
+*   **Reference Data Integration**: Rule and source reference tables are integrated throughout the application, providing human-readable names alongside IDs for better usability.
+*   **Visualization Dashboard**: The application includes a dashboard with Chart.js visualizations to help users analyze data quality issues over time and across different rules and sources.
+*   **Modern UI**: The frontend uses Bootstrap and custom CSS with responsive design for a consistent and modern look and feel across all pages. The navigation bar is optimized for both desktop and mobile devices.
 
 ## Utilities
 
@@ -214,3 +302,136 @@ The `logger.py` module provides comprehensive chat logging capabilities:
     ```
 
 For more examples, see the `utils/logger_examples.py` file.
+
+## New Features
+
+### 1. Bad Detail Query
+
+*   **Purpose**: Provides a user-friendly interface for filtering and viewing bad detail records.
+*   **Key Components**:
+    *   `app/routes/bad_detail.py`: Contains endpoints for retrieving and filtering bad detail data.
+    *   `app/templates/bad_detail_query.html`: Frontend template with filtering UI and results display.
+*   **Key Features**:
+    *   Filtering by rule_id and source_id with descriptive dropdowns showing both ID and name
+    *   Pagination for large result sets
+    *   Integration with visualization tools
+
+### 2. Data Visualization
+
+*   **Purpose**: Provides graphical representation of bad detail data for easier analysis.
+*   **Key Components**:
+    *   `app/routes/stats.py`: Contains endpoints for generating visualization data.
+    *   `app/templates/visualization.html`: Frontend template with Chart.js visualizations.
+*   **Key Features**:
+    *   Bad detail counts by date (line chart)
+    *   Bad detail counts by rule (bar chart)
+    *   Bad detail counts by source (bar chart)
+    *   Filtering by rule_id and source_id with descriptive dropdowns
+
+### 3. Job Scheduler
+
+*   **Purpose**: Allows scheduling SQL scripts to run at specific intervals.
+*   **Key Components**:
+    *   `app/routes/scheduler.py`: Contains endpoints for managing job schedules.
+    *   `app/templates/scheduler.html`: Frontend interface for schedule management.
+*   **Key Features**:
+    *   Support for daily, weekly, and monthly schedules
+    *   Cron-based scheduling (using standard cron format)
+    *   Active/inactive status toggling
+    *   Integration with SQL scripts
+
+### 4. Reference Tables Management
+
+*   **Purpose**: Provides an interface for managing rule and source reference tables.
+*   **Key Components**:
+    *   `app/routes/reference_tables.py`: Contains endpoints for CRUD operations on reference tables.
+    *   `app/templates/reference_tables.html`: Frontend interface for managing references.
+*   **Key Features**:
+    *   Add, view, and delete rule references
+    *   Add, view, and delete source references
+    *   Integration with bad detail query and visualization for improved data display
+
+### 5. Authentication and Authorization
+
+*   **Purpose**: Provides user authentication and authorization capabilities.
+*   **Key Components**:
+    *   `app/auth.py`: Core authentication logic.
+    *   `app/dependencies_auth.py`: Authentication-related dependencies for routes.
+    *   `app/routes/auth.py`: API routes for login, registration, and user management.
+*   **Key Features**:
+    *   JWT-based token authentication
+    *   Password hashing for security
+    *   Login/logout functionality
+    *   User profile management
+
+### 6. Improved Navigation and UI
+
+*   **Purpose**: Enhances user experience with a consistent and responsive design.
+*   **Key Components**:
+    *   `app/static/css/style.css`: Shared CSS styles.
+    *   `app/templates/partials/main_nav.html`: Reusable navigation component.
+*   **Key Features**:
+    *   Responsive navigation bar with mobile support
+    *   Consistent styling across all pages
+    *   Improved typography and spacing
+    *   Visual indicators for active page
+
+## Database Schema
+
+### Key Tables
+
+1. **dq.bad_detail**
+   ```sql
+   CREATE TABLE dq.bad_detail (
+       rule_id VARCHAR(20),
+       source_id VARCHAR(20),
+       source_uid VARCHAR(500),
+       data_value VARCHAR(2000),
+       txn_date DATE,
+       PRIMARY KEY (rule_id, source_id, source_uid)
+   );
+   ```
+
+2. **dq.rule_ref**
+   ```sql
+   CREATE TABLE dq.rule_ref (
+       rule_id VARCHAR(20) PRIMARY KEY,
+       rule_name VARCHAR(100) NOT NULL,
+       description TEXT
+   );
+   ```
+
+3. **dq.source_ref**
+   ```sql
+   CREATE TABLE dq.source_ref (
+       source_id VARCHAR(20) PRIMARY KEY,
+       source_name VARCHAR(100) NOT NULL,
+       description TEXT
+   );
+   ```
+
+4. **dq.dq_schedules**
+   ```sql
+   CREATE TABLE dq.dq_schedules (
+       id SERIAL PRIMARY KEY,
+       job_name VARCHAR(100) NOT NULL,
+       script_id INTEGER REFERENCES dq.dq_sql_scripts(id) ON DELETE CASCADE,
+       cron_schedule VARCHAR(100) NOT NULL,
+       is_active BOOLEAN DEFAULT TRUE,
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW()
+   );
+   ```
+
+5. **dq.users**
+   ```sql
+   CREATE TABLE dq.users (
+       id SERIAL PRIMARY KEY,
+       username VARCHAR(50) UNIQUE NOT NULL,
+       email VARCHAR(100) UNIQUE NOT NULL,
+       hashed_password VARCHAR(100) NOT NULL,
+       is_active BOOLEAN DEFAULT TRUE,
+       is_admin BOOLEAN DEFAULT FALSE,
+       created_at TIMESTAMPTZ DEFAULT NOW()
+   );
+   ```

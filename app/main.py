@@ -109,6 +109,15 @@ app.include_router(reference_tables.router, dependencies=[Depends(login_required
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
+# Route to handle Chrome DevTools requests to avoid 404 errors in logs
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools_config():
+    """
+    Handle requests from Chrome DevTools to avoid 404 errors in logs.
+    Returns an empty JSON object.
+    """
+    return {}
+
 # Page Endpoints
 @app.get("/", response_class=HTMLResponse)
 async def read_root(

@@ -7,9 +7,11 @@ A FastAPI application for exploring and querying databases with a web interface.
 - Browse database tables
 - Execute SQL queries
 - Save and manage SQL scripts
-- Schedule SQL scripts to run at specific intervals
+- Schedule SQL scripts to run at specific intervals using cron schedules
 - Web interface for interacting with databases
-- Chat logging functionality to record user-assistant interactions
+- Data quality validation with rule and source reference tables
+- Bad detail query and visualization tools
+- Improved navigation with responsive design
 
 ## Installation
 
@@ -27,35 +29,35 @@ The application includes reference tables management for rules and sources. Acce
 
 ### Advanced Features
 
-- **Custom Timestamps**: Backdate logs when needed
-- **Log Retrieval**: Fetch recent logs or filter by date
-- **Log Management**: Functions for clearing logs and getting log file paths
+- **Data Quality Management**: Manage rule and source references through the UI
+- **Bad Detail Query**: Filter and view bad detail records with pagination
+- **Visualizations**: Graphical representation of bad details data
+- **Job Scheduling**: Schedule SQL scripts using daily, weekly, or monthly patterns
+- **User Management**: Authentication and authorization capabilities
 
-### Examples
+### Database Structure
 
-```python
-# Basic logging
-from utils.logger import log_chat
-log_chat("How do I use this?", "It's easy! Just follow the documentation.")
+The application uses PostgreSQL with the following key tables:
 
-# Read recent logs
-from utils.logger import read_chat_logs
-recent_logs = read_chat_logs(num_entries=5)
+1. **dq.bad_detail** - Stores data quality validation errors
+2. **dq.rule_ref** - Reference table for data quality rules
+3. **dq.source_ref** - Reference table for data sources
+4. **dq.dq_schedules** - Stores job scheduling information
+5. **dq.dq_sql_scripts** - Stores saved SQL scripts
 
-# Filter logs by date
-from datetime import datetime
-from utils.logger import read_chat_logs
-yesterday = datetime(2025, 6, 23)
-filtered_logs = read_chat_logs(from_date=yesterday)
-```
+### Key Pages
 
-For more examples, see the `utils/logger_examples.py` file.
-
-Chat logs are stored in the project root directory in the `chat_log.txt` file.
+- **/** - Home page with links to all functionality
+- **/schedules** - Job scheduler interface
+- **/references** - Rule and source reference tables management
+- **/bad_detail_query** - Query interface for bad detail records
+- **/visualization** - Data visualization dashboard
 
 ## Technologies Used
 
-- FastAPI
-- psycopg2
-- uvicorn
-- HTML/CSS/JavaScript
+- FastAPI - Web framework for building APIs
+- psycopg2 - PostgreSQL adapter for Python
+- uvicorn - ASGI server for FastAPI
+- Bootstrap - Frontend UI framework
+- Chart.js - JavaScript charting library for visualizations
+- HTML/CSS/JavaScript - Frontend technologies
