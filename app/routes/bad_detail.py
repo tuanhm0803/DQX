@@ -16,14 +16,35 @@ def fetch_filter_options(db, filter_name, search_term=None):
     """Helper function to fetch filter options with optional search filtering"""
     options = []
     try:
-        query = f"SELECT DISTINCT {filter_name} FROM dq.bad_detail ORDER BY {filter_name}"
-        results = crud.execute_query(query, db)
-        if results and results.get('data'):
-            options = [row.get(filter_name) for row in results['data'] if row.get(filter_name)]
-            # If search term is provided, filter options on the server side
-            if search_term:
-                search_term_lower = search_term.lower()
-                options = [opt for opt in options if search_term_lower in str(opt).lower()]
+        if filter_name == "rule_id":
+            # Get rule_id and rule_name for filter options
+            query = "SELECT rule_id, rule_name FROM dq.rule_ref ORDER BY rule_id"
+            results = crud.execute_query(query, db)
+            if results and results.get('data'):
+                # Create options with ID and name
+                options = [(row.get('rule_id'), f"{row.get('rule_id')} - {row.get('rule_name')}") 
+                          for row in results['data'] if row.get('rule_id')]
+        elif filter_name == "source_id":
+            # Get source_id and source_name for filter options
+            query = "SELECT source_id, source_name FROM dq.source_ref ORDER BY source_id"
+            results = crud.execute_query(query, db)
+            if results and results.get('data'):
+                # Create options with ID and name
+                options = [(row.get('source_id'), f"{row.get('source_id')} - {row.get('source_name')}") 
+                          for row in results['data'] if row.get('source_id')]
+        else:
+            # For other filters, use the original approach
+            query = f"SELECT DISTINCT {filter_name} FROM dq.bad_detail ORDER BY {filter_name}"
+            results = crud.execute_query(query, db)
+            if results and results.get('data'):
+                options = [(row.get(filter_name), row.get(filter_name)) 
+                          for row in results['data'] if row.get(filter_name)]
+        
+        # If search term is provided, filter options on the server side
+        if search_term and options:
+            search_term_lower = search_term.lower()
+            options = [(id_val, label) for id_val, label in options 
+                      if search_term_lower in str(label).lower()]
     except Exception as e:
         print(f"Error fetching {filter_name}: {str(e)}")
     return options
@@ -34,14 +55,20 @@ def execute_bad_detail_query(db, rule_id=None, source_id=None):
     data = []
     
     if rule_id or source_id:
-        query_str = "SELECT * FROM dq.bad_detail"
+        # Updated query to join with rule_ref and source_ref tables
+        query_str = """
+            SELECT c.source_name, b.rule_name, a.* 
+            FROM dq.bad_detail a
+            LEFT JOIN dq.rule_ref b ON a.rule_id = b.rule_id
+            LEFT JOIN dq.source_ref c ON a.source_id = c.source_id
+        """
         conditions = []
         params = []
         if rule_id and rule_id != "All":
-            conditions.append("rule_id = %s")
+            conditions.append("a.rule_id = %s")
             params.append(rule_id)
         if source_id and source_id != "All":
-            conditions.append("source_id = %s")
+            conditions.append("a.source_id = %s")
             params.append(source_id)
         
         if conditions:
@@ -122,7 +149,7 @@ async def bad_detail_query_page(
 async def search_options(
     request: Request,
     field: str,
-    search_term: str = None,
+    search_term: Optional[str] = None,
     db: PgConnection = Depends(get_db)
 ):
     """

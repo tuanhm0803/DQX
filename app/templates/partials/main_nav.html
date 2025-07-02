@@ -14,9 +14,6 @@
                     <a class="nav-link {% if '/editor' in request.url.path %}active{% endif %}" href="/editor">SQL Editor</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="/docs" target="_blank">API Docs</a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link {% if '/bad_detail_query' in request.url.path %}active{% endif %}" href="/bad_detail_query">DQ Errors Query</a>
                 </li>
                 <li class="nav-item">
@@ -24,6 +21,9 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if '/references' in request.url.path %}active{% endif %}" href="/references">Reference Tables</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/docs" target="_blank">API Docs</a>
                 </li>
                 {% if current_user %}
                 <li class="nav-item">

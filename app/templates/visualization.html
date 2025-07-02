@@ -51,27 +51,27 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-3 mb-3">
                         <select name="rule_id" class="form-select">
-                            <option value="">-- Select Rule ID --</option>
+                            <option value="">-- Select Rule --</option>
                         <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
                         {% if rule_ids %}
-                            {% for id in rule_ids %}
-                                <option value="{{ id }}" {% if id == rule_id %}selected{% endif %}>{{ id }}</option>
+                            {% for id_tuple in rule_ids %}
+                                <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == rule_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
                             {% endfor %}
                         {% else %}
-                            <option value="" disabled>(no rule IDs available)</option>
+                            <option value="" disabled>(no rules available)</option>
                         {% endif %}
                     </select>
                     </div>
                     <div class="col-md-3 mb-3">
                     <select name="source_id" class="form-select">
-                        <option value="">-- Select Source ID --</option>
+                        <option value="">-- Select Source --</option>
                         <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
                         {% if source_ids %}
-                            {% for id in source_ids %}
-                                <option value="{{ id }}" {% if id == source_id %}selected{% endif %}>{{ id }}</option>
+                            {% for id_tuple in source_ids %}
+                                <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == source_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
                             {% endfor %}
                         {% else %}
-                            <option value="" disabled>(no source IDs available)</option>
+                            <option value="" disabled>(no sources available)</option>
                         {% endif %}
                     </select>
                     </div>
@@ -96,8 +96,24 @@
             <div class="mb-4 p-3 bg-light rounded">
                 <p class="small">
                     <i class="bi bi-filter"></i> Filters applied:
-                    {% if rule_id %}<span class="badge bg-primary me-2">Rule ID: {{ rule_id }}</span>{% endif %}
-                    {% if source_id %}<span class="badge bg-primary">Source ID: {{ source_id }}</span>{% endif %}
+                    {% if rule_id %}
+                        <span class="badge bg-primary me-2">
+                            Rule: {% if rule_id == "All" %}All Rules{% else %}
+                                {% for id_tuple in rule_ids %}
+                                    {% if id_tuple[0]|string == rule_id|string %}{{ id_tuple[1] }}{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </span>
+                    {% endif %}
+                    {% if source_id %}
+                        <span class="badge bg-primary">
+                            Source: {% if source_id == "All" %}All Sources{% else %}
+                                {% for id_tuple in source_ids %}
+                                    {% if id_tuple[0]|string == source_id|string %}{{ id_tuple[1] }}{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </span>
+                    {% endif %}
                     {% if show_all %}<span class="badge bg-purple-500 text-white px-2 py-1 rounded ml-2">Showing up to 1000 records</span>{% endif %}
                 </p>
             </div>
@@ -158,74 +174,11 @@
     </div>
 
     <script>
-        // Function to make dropdowns searchable
+        // Initialize charts when the page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the select elements
-            const ruleIdSelect = document.querySelector('select[name="rule_id"]');
-            const sourceIdSelect = document.querySelector('select[name="source_id"]');
-            
-            // Add event listeners for keyboard navigation
-            if (ruleIdSelect) {
-                enhanceDropdown(ruleIdSelect);
-            }
-            
-            if (sourceIdSelect) {
-                enhanceDropdown(sourceIdSelect);
-            }
-
             // Initialize the charts if we have data
             initializeCharts();
         });
-
-        function enhanceDropdown(selectElement) {
-            // Add keyup event for filtering options
-            selectElement.addEventListener('keyup', function(e) {
-                const searchText = e.target.value.toLowerCase();
-                
-                // Skip navigation keys
-                if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
-                    return;
-                }
-                
-                // Get all options except the first two (placeholder and "All")
-                const options = Array.from(selectElement.options).slice(2);
-                
-                // Track if we found any matches
-                let foundMatch = false;
-                
-                // Filter options based on input text
-                options.forEach(option => {
-                    const optionText = option.text.toLowerCase();
-                    if (optionText.includes(searchText)) {
-                        option.style.display = '';
-                        foundMatch = true;
-                    } else {
-                        option.style.display = 'none';
-                    }
-                });
-                
-                // If we have a match and a key other than navigation was pressed,
-                // open the dropdown to show the filtered options
-                if (foundMatch && !['Tab'].includes(e.key)) {
-                    selectElement.size = Math.min(10, options.length);
-                    selectElement.focus();
-                }
-            });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(e) {
-                if (e.target !== selectElement) {
-                    selectElement.size = 1;
-                }
-            });
-            
-            // Close dropdown on blur
-            selectElement.addEventListener('blur', function() {
-                setTimeout(() => {
-                    selectElement.size = 1;
-                }, 200);
-            });
-        }
 
         function initializeCharts() {
             // Only initialize charts if we have chart data

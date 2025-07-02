@@ -22,7 +22,7 @@ def create_schedule_form(
     schedule_type: str = Form(...),
     day_of_week: str = Form(None),
     execution_time: str = Form(...),
-    is_active: bool = Form(False)
+    is_active: str = Form(None)
 ):
     time_parts = execution_time.split(':')
     minute, hour = time_parts[1], time_parts[0]
@@ -31,12 +31,15 @@ def create_schedule_form(
         cron_schedule = f"{minute} {hour} * * {day_of_week}"
     elif schedule_type == 'monthly':
         cron_schedule = f"{minute} {hour} L * *"
+        
+    # Convert is_active string to boolean - checkbox is only present in form data when checked
+    is_active_bool = is_active is not None
 
     schedule_data = schemas.ScheduleCreate(
         job_name=job_name,
         script_id=script_id,
         cron_schedule=cron_schedule,
-        is_active=is_active
+        is_active=is_active_bool
     )
     try:
         crud.create_schedule(db, schedule_data.model_dump())
@@ -53,6 +56,47 @@ def edit_schedule_form(schedule_id: int, request: Request, db: PgConnection = De
     schedules = crud.get_schedules(db)
     scripts = crud.get_sql_scripts(db)
     return render_template("scheduler.html", {"request": request, "schedule": schedule, "schedules": schedules, "scripts": scripts, "form_title": "Edit Schedule"})
+
+@router.post("/schedules/edit/{schedule_id}")
+def update_schedule_form(
+    schedule_id: int,
+    db: PgConnection = Depends(get_db),
+    job_name: str = Form(...),
+    script_id: int = Form(...),
+    schedule_type: str = Form(...),
+    day_of_week: str = Form(None),
+    execution_time: str = Form(...),
+    is_active: str = Form(None)
+):
+    # Parse the time
+    time_parts = execution_time.split(':')
+    minute, hour = time_parts[1], time_parts[0]
+    
+    # Create the cron schedule string based on the schedule type
+    cron_schedule = f"{minute} {hour} * * *"
+    if schedule_type == 'weekly':
+        cron_schedule = f"{minute} {hour} * * {day_of_week}"
+    elif schedule_type == 'monthly':
+        cron_schedule = f"{minute} {hour} L * *"
+
+    # Convert is_active string to boolean - checkbox is only present in form data when checked
+    is_active_bool = is_active is not None
+
+    # Create the schedule update data
+    schedule_data = schemas.ScheduleUpdate(
+        job_name=job_name,
+        script_id=script_id,
+        cron_schedule=cron_schedule,
+        is_active=is_active_bool
+    )
+    
+    try:
+        crud.update_schedule(db, schedule_id, schedule_data.model_dump())
+    except ValueError as e:
+        # You might want to render the form again with an error message
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    return RedirectResponse(url="/schedules/", status_code=303)
 
 @router.get("/schedules/delete/{schedule_id}")
 def delete_schedule_form(schedule_id: int, db: PgConnection = Depends(get_db)):

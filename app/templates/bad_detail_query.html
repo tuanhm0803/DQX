@@ -29,44 +29,31 @@
             <form method="get" action="/bad_detail_query">
                 <div class="row g-3 mb-3">
                     <div class="col-md-4 mb-3">
-                        <div class="mb-3">
-                            <label for="rule-search" class="form-label">Search Rule ID:</label>
-                            <input type="text" id="rule-search" class="form-control"
-                                   placeholder="Type to search rules..."
-                                   name="search_term"
-                                   value="{{ search_term or '' }}">
-                        </div>
+                        <label for="rule-select" class="form-label">Rule:</label>
                         <select name="rule_id" id="rule-select" class="form-select">
-                            <option value="">-- Select Rule ID --</option>
+                            <option value="">-- Select Rule --</option>
                             <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
                             {% if rule_ids %}
-                                {% for id in rule_ids %}
-                                    <option value="{{ id }}" {% if id == rule_id %}selected{% endif %}>{{ id }}</option>
+                                {% for id_tuple in rule_ids %}
+                                    <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == rule_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
                                 {% endfor %}
                             {% else %}
-                                <option value="" disabled>(no rule IDs available)</option>
+                                <option value="" disabled>(no rules available)</option>
                             {% endif %}
                         </select>
                     </div>
                     
                     <div class="col-md-4 mb-3">
-                        <div class="mb-3">
-                            <label for="source-search" class="form-label">Search Source ID:</label>
-                            <input type="text" id="source-search" 
-                                   class="form-control"
-                                   placeholder="Type to search sources..."
-                                   name="search_term"
-                                   value="{{ search_term or '' }}">
-                        </div>
+                        <label for="source-select" class="form-label">Source:</label>
                         <select name="source_id" id="source-select" class="form-select">
-                            <option value="">-- Select Source ID --</option>
+                            <option value="">-- Select Source --</option>
                             <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
                             {% if source_ids %}
-                                {% for id in source_ids %}
-                                    <option value="{{ id }}" {% if id == source_id %}selected{% endif %}>{{ id }}</option>
+                                {% for id_tuple in source_ids %}
+                                    <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == source_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
                                 {% endfor %}
                             {% else %}
-                                <option value="" disabled>(no source IDs available)</option>
+                                <option value="" disabled>(no sources available)</option>
                             {% endif %}
                         </select>
                     </div>
@@ -88,8 +75,24 @@
             <div class="mb-4 p-3 bg-light rounded">
                 <p class="small">
                     <i class="bi bi-filter"></i> Filters applied:
-                    {% if rule_id %}<span class="badge bg-primary me-2">Rule ID: {{ rule_id }}</span>{% endif %}
-                    {% if source_id %}<span class="badge bg-primary">Source ID: {{ source_id }}</span>{% endif %}
+                    {% if rule_id %}
+                        <span class="badge bg-primary me-2">
+                            Rule: {% if rule_id == "All" %}All Rules{% else %}
+                                {% for id_tuple in rule_ids %}
+                                    {% if id_tuple[0]|string == rule_id|string %}{{ id_tuple[1] }}{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </span>
+                    {% endif %}
+                    {% if source_id %}
+                        <span class="badge bg-primary">
+                            Source: {% if source_id == "All" %}All Sources{% else %}
+                                {% for id_tuple in source_ids %}
+                                    {% if id_tuple[0]|string == source_id|string %}{{ id_tuple[1] }}{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </span>
+                    {% endif %}
                 </p>
             </div>
             {% endif %}
@@ -165,40 +168,9 @@
         </div>
     </div>
 
+    <!-- Removed search input script as search boxes have been removed -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Setup search inputs to filter the dropdowns using server-side filtering
-            const ruleSearch = document.getElementById('rule-search');
-            const sourceSearch = document.getElementById('source-search');
-            
-            // Function to handle server-side search and update dropdown options
-            function setupSearch(searchInput, selectElement, fieldName) {
-                if (!searchInput || !selectElement) return;
-                
-                // Disable the default dropdown keyboard search behavior
-                selectElement.addEventListener('keydown', function(e) {
-                    if (e.key.length === 1) { // Only for character keys
-                        e.preventDefault();
-                    }
-                });
-                
-                // Use server-side search instead of client-side filtering
-                searchInput.addEventListener('input', function() {
-                    const searchTerm = this.value.trim();
-                    
-                    // Submit the form with the search parameter
-                    if (searchTerm.length >= 2) { // Only search if at least 2 characters
-                        const form = this.closest('form');
-                        form.action = "/bad_detail_query?search_term=" + encodeURIComponent(searchTerm);
-                        form.submit();
-                    }
-                });
-            }
-            
-            // Setup search for rule_id and source_id dropdowns
-            setupSearch(ruleSearch, document.getElementById('rule-select'), 'rule_id');
-            setupSearch(sourceSearch, document.getElementById('source-select'), 'source_id');
-        });
+        // Keeping this script tag for future functionality if needed
     </script>
 </body>
 </html>

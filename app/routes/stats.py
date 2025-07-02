@@ -33,23 +33,27 @@ async def visualization_page(request: Request, rule_id: str = None, source_id: s
     Returns:
         HTML response with the visualization page
     """
-    # Get available rule_ids for dropdown
+    # Get available rule_ids and names for dropdown
     rule_ids = []
     try:
-        rule_id_query = "SELECT DISTINCT rule_id FROM dq.bad_detail ORDER BY rule_id"
+        rule_id_query = "SELECT rule_id, rule_name FROM dq.rule_ref ORDER BY rule_id"
         rule_id_results = crud.execute_query(rule_id_query, db)
         if rule_id_results and rule_id_results.get('data'):
-            rule_ids = [row.get('rule_id') for row in rule_id_results['data'] if row.get('rule_id')]
+            # Create tuples with (id, label) format
+            rule_ids = [(row.get('rule_id'), f"{row.get('rule_id')} - {row.get('rule_name')}") 
+                      for row in rule_id_results['data'] if row.get('rule_id')]
     except Exception as e:
         print(f"Error fetching rule_ids: {str(e)}")
     
-    # Get available source_ids for dropdown
+    # Get available source_ids and names for dropdown
     source_ids = []
     try:
-        source_id_query = "SELECT DISTINCT source_id FROM dq.bad_detail ORDER BY source_id"
+        source_id_query = "SELECT source_id, source_name FROM dq.source_ref ORDER BY source_id"
         source_id_results = crud.execute_query(source_id_query, db)
         if source_id_results and source_id_results.get('data'):
-            source_ids = [row.get('source_id') for row in source_id_results['data'] if row.get('source_id')]
+            # Create tuples with (id, label) format
+            source_ids = [(row.get('source_id'), f"{row.get('source_id')} - {row.get('source_name')}") 
+                        for row in source_id_results['data'] if row.get('source_id')]
     except Exception as e:
         print(f"Error fetching source_ids: {str(e)}")
     

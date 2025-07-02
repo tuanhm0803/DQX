@@ -2,28 +2,61 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #f5f7fa 0%, #e4eaff 100%);
-    color: #333;
+    color: #0a0046;
     min-height: 100vh;
     padding-bottom: 50px;
+    padding-top: 60px; /* Add padding-top to match navbar height */
 }
 
 /* Navigation Bar */
 .navbar {
-    background-color: rgba(0, 0, 0, 0.8) !important; /* Use important to override bootstrap */
+    background-color: rgba(16, 0, 85, 0.8) !important; /* Use important to override bootstrap */
     backdrop-filter: blur(10px);
     box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+    padding: 0.5rem 1rem; /* Reduced padding to make navbar shorter */
+    min-height: 60px; /* Set a fixed minimum height */
 }
 
 .navbar-brand {
     font-family: 'Segoe UI', sans-serif;
     font-weight: 700;
     letter-spacing: 1px;
-    font-size: 1.5rem;
+    font-size: 2rem;
 }
 
 .navbar-brand span {
     color: #00aaff;
     font-weight: 900;
+}
+
+/* Improve navbar toggler */
+.navbar-toggler {
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    border: 2px solid rgba(255,255,255,0.3);
+}
+
+.navbar-toggler:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 170, 255, 0.25);
+}
+
+/* Increase font size for navigation links */
+.navbar-nav .nav-link {
+    font-size: 1.1rem; /* Larger font size */
+    font-weight: 500; /* Medium weight for better visibility */
+    padding: 0.5rem 1rem; /* Better spacing around links */
+}
+
+/* Make active nav links more prominent */
+.navbar-nav .nav-link.active {
+    color: #00aaff !important; /* Match the accent color */
+    font-weight: 600; /* Bolder than regular links */
+    border-bottom: 2px solid #00aaff; /* Underline effect */
+}
+
+/* Standard container spacing for consistent layout with fixed navbar */
+.main-container {
+    padding-top: 1.5rem;
 }
 
 /* Hero Section */
@@ -331,7 +364,7 @@ th {
 
 /* Container spacing for all pages */
 .container {
-    padding-top: 80px;
+    padding-top: 20px;
 }
 
 /* Form styling */
