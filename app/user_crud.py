@@ -74,7 +74,7 @@ def get_user_by_id(db: PgConnection, user_id: int) -> Optional[User]:
     try:
         cursor.execute(
             """
-            SELECT id, username, email, full_name, hashed_password, is_active, created_at, updated_at
+            SELECT id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
             FROM dq.users
             WHERE id = %s
             """,
@@ -92,8 +92,9 @@ def get_user_by_id(db: PgConnection, user_id: int) -> Optional[User]:
             full_name=user_data[3],
             hashed_password=user_data[4],
             is_active=user_data[5],
-            created_at=user_data[6],
-            updated_at=user_data[7]
+            role=user_data[6],
+            created_at=user_data[7],
+            updated_at=user_data[8]
         )
     finally:
         cursor.close()
@@ -125,8 +126,9 @@ def get_user_by_username(db: PgConnection, username: str) -> Optional[User]:
             full_name=user_data[3],
             hashed_password=user_data[4],
             is_active=user_data[5],
-            created_at=user_data[6],
-            updated_at=user_data[7]
+            role=user_data[6],
+            created_at=user_data[7],
+            updated_at=user_data[8]
         )
     finally:
         cursor.close()
@@ -140,7 +142,7 @@ def get_user_by_email(db: PgConnection, email: str) -> Optional[User]:
     try:
         cursor.execute(
             """
-            SELECT id, username, email, full_name, hashed_password, is_active, created_at, updated_at
+            SELECT id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
             FROM dq.users
             WHERE email = %s
             """,
@@ -158,13 +160,14 @@ def get_user_by_email(db: PgConnection, email: str) -> Optional[User]:
             full_name=user_data[3],
             hashed_password=user_data[4],
             is_active=user_data[5],
-            created_at=user_data[6],
-            updated_at=user_data[7]
+            role=user_data[6],
+            created_at=user_data[7],
+            updated_at=user_data[8]
         )
     finally:
         cursor.close()
 
-def update_user(db: PgConnection, user_id: int, user_data: dict) -> Optional[User]:
+def update_user(db: PgConnection, user_id: int, update_data: dict) -> Optional[User]:
     """
     Update a user's information.
     Returns the updated User object if successful, None if the user doesn't exist.
@@ -180,7 +183,7 @@ def update_user(db: PgConnection, user_id: int, user_data: dict) -> Optional[Use
         update_fields = []
         params = []
         
-        for field, value in user_data.items():
+        for field, value in update_data.items():
             if value is not None:  # Only update provided fields
                 update_fields.append(f"{field} = %s")
                 params.append(value)
@@ -196,25 +199,26 @@ def update_user(db: PgConnection, user_id: int, user_data: dict) -> Optional[Use
             UPDATE dq.users
             SET {", ".join(update_fields)}
             WHERE id = %s
-            RETURNING id, username, email, full_name, hashed_password, is_active, created_at, updated_at
+            RETURNING id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
         """
         
         cursor.execute(query, params)
-        user_data = cursor.fetchone()
+        result = cursor.fetchone()
         db.commit()
         
-        if not user_data:
+        if not result:
             return None
             
         return User(
-            id=user_data[0],
-            username=user_data[1],
-            email=user_data[2],
-            full_name=user_data[3],
-            hashed_password=user_data[4],
-            is_active=user_data[5],
-            created_at=user_data[6],
-            updated_at=user_data[7]
+            id=result[0],
+            username=result[1],
+            email=result[2],
+            full_name=result[3],
+            hashed_password=result[4],
+            is_active=result[5],
+            role=result[6],
+            created_at=result[7],
+            updated_at=result[8]
         )
     
     except psycopg2.Error as e:
@@ -237,6 +241,75 @@ def deactivate_user(db: PgConnection, user_id: int) -> bool:
             WHERE id = %s
             """,
             (datetime.now(), user_id)
+        )
+        
+        if cursor.rowcount == 0:
+            return False
+            
+        db.commit()
+        return True
+    except psycopg2.Error as e:
+        db.rollback()
+        raise e
+    finally:
+        cursor.close()
+
+def get_users(db: PgConnection):
+    """
+    Retrieve all users from the database.
+    Returns a list of User objects.
+    """
+    cursor = db.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
+            FROM dq.users
+            ORDER BY id ASC
+            """
+        )
+        
+        users_data = cursor.fetchall()
+        users = []
+        
+        for user_data in users_data:
+            users.append(User(
+                id=user_data[0],
+                username=user_data[1],
+                email=user_data[2],
+                full_name=user_data[3],
+                hashed_password=user_data[4],
+                is_active=user_data[5],
+                role=user_data[6],
+                created_at=user_data[7],
+                updated_at=user_data[8]
+            ))
+            
+        return users
+    finally:
+        cursor.close()
+
+def get_user(db: PgConnection, user_id: int) -> Optional[User]:
+    """
+    Retrieve a user by their ID.
+    This is an alias for get_user_by_id for consistency in function naming.
+    Returns User object if found, None otherwise.
+    """
+    return get_user_by_id(db, user_id)
+
+def delete_user(db: PgConnection, user_id: int) -> bool:
+    """
+    Delete a user from the database.
+    Returns True if successful, False if the user doesn't exist.
+    """
+    cursor = db.cursor()
+    try:
+        cursor.execute(
+            """
+            DELETE FROM dq.users
+            WHERE id = %s
+            """,
+            (user_id,)
         )
         
         if cursor.rowcount == 0:

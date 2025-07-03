@@ -95,30 +95,60 @@ body {
 }
 
 .feature-card {
-    background: #fff;
-    padding: 30px;
+    background: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
+    padding: 30px 20px;
     text-align: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    transition: transform 0.3s, box-shadow 0.3s;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
     height: 100%;
-    border: none; /* remove border from bootstrap card */
+    cursor: pointer;
+    position: relative;
 }
 
 .feature-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
 .feature-icon {
-    font-size: 3rem;
+    font-size: 2.5rem;
     color: #007bff;
     margin-bottom: 20px;
 }
 
-.card-link {
-    text-decoration: none;
-    color: inherit;
+.feature-card h3 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.feature-card p {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* Highlighted Feature Card */
+.feature-card.highlight-feature {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(240, 249, 255, 0.95));
+    border: 1px solid rgba(0, 170, 255, 0.2);
+    box-shadow: 0 8px 20px rgba(0, 170, 255, 0.15);
+}
+
+.feature-card.highlight-feature:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 170, 255, 0.25);
+}
+
+.feature-card.highlight-feature .feature-icon {
+    color: #0088cc;
+}
+
+.feature-card .badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.7rem;
 }
 
 /* Footer */
@@ -478,4 +508,74 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 500;
     padding: 0.4em 0.6em;
     border-radius: 4px;
+}
+
+/* Feature Cards */
+.feature-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    padding: 30px 20px;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    height: 100%;
+    cursor: pointer;
+    position: relative;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.feature-icon {
+    font-size: 2.5rem;
+    color: #007bff;
+    margin-bottom: 20px;
+}
+
+.feature-card h3 {
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.feature-card p {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* Highlighted Feature Card */
+.feature-card.highlight-feature {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(240, 249, 255, 0.95));
+    border: 1px solid rgba(0, 170, 255, 0.2);
+    box-shadow: 0 8px 20px rgba(0, 170, 255, 0.15);
+}
+
+.feature-card.highlight-feature:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 170, 255, 0.25);
+}
+
+.feature-card.highlight-feature .feature-icon {
+    color: #0088cc;
+}
+
+.feature-card .badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.7rem;
+}
+
+.card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    height: 100%;
+}
+
+.card-link:hover, .card-link:focus {
+    text-decoration: none;
+    color: inherit;
 }

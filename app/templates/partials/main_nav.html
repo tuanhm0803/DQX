@@ -29,6 +29,7 @@
                     <a class="nav-link" href="/docs" target="_blank">API Docs</a>
                 </li>
                 {% if current_user %}
+                <!-- Debug info: {{ current_user.role }} -->
                 {% if current_user.role == 'admin' %}
                 <li class="nav-item">
                     <a class="nav-link {% if '/admin' in request.url.path %}active{% endif %}" href="/admin/users">
