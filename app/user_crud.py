@@ -13,11 +13,17 @@ from typing import Optional
 
 # --- User Management Functions ---
 
-def create_user(db: PgConnection, username: str, email: str, password: str, full_name: Optional[str] = None) -> User:
+def create_user(db: PgConnection, username: str, email: str, password: str, 
+               full_name: Optional[str] = None, role: str = "inputter") -> User:
     """
-    Create a new user in the database.
+    Create a new user in the database with the specified role.
+    Valid roles are 'admin', 'creator', and 'inputter'.
     Returns the created User object.
     """
+    # Validate the role
+    if role not in ["admin", "creator", "inputter"]:
+        raise ValueError(f"Invalid role: {role}. Must be 'admin', 'creator', or 'inputter'.")
+        
     cursor = db.cursor()
     hashed_password = get_password_hash(password)
     now = datetime.now()
@@ -25,11 +31,11 @@ def create_user(db: PgConnection, username: str, email: str, password: str, full
     try:
         cursor.execute(
             """
-            INSERT INTO dq.users (username, email, full_name, hashed_password, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id, username, email, full_name, hashed_password, is_active, created_at, updated_at
+            INSERT INTO dq.users (username, email, full_name, hashed_password, role, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
             """,
-            (username, email, full_name, hashed_password, now, now)
+            (username, email, full_name, hashed_password, role, now, now)
         )
         
         user_data = cursor.fetchone()
@@ -43,8 +49,9 @@ def create_user(db: PgConnection, username: str, email: str, password: str, full
             full_name=user_data[3],
             hashed_password=user_data[4],
             is_active=user_data[5],
-            created_at=user_data[6],
-            updated_at=user_data[7]
+            role=user_data[6],
+            created_at=user_data[7],
+            updated_at=user_data[8]
         )
     
     except psycopg2.Error as e:
@@ -100,7 +107,7 @@ def get_user_by_username(db: PgConnection, username: str) -> Optional[User]:
     try:
         cursor.execute(
             """
-            SELECT id, username, email, full_name, hashed_password, is_active, created_at, updated_at
+            SELECT id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
             FROM dq.users
             WHERE username = %s
             """,

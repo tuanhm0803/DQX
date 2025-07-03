@@ -23,12 +23,25 @@
                     <a class="nav-link {% if '/references' in request.url.path %}active{% endif %}" href="/references">Reference Tables</a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link {% if '/source_data_management' in request.url.path %}active{% endif %}" href="/source_data_management">Source Data</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="/docs" target="_blank">API Docs</a>
                 </li>
                 {% if current_user %}
+                {% if current_user.role == 'admin' %}
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin' in request.url.path %}active{% endif %}" href="/admin/users">
+                        <i class="bi bi-people me-1"></i> User Management
+                    </a>
+                </li>
+                {% endif %}
                 <li class="nav-item">
                     <a class="nav-link {% if '/profile' in request.url.path %}active{% endif %}" href="/profile">
                         <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
+                        <span class="badge {% if current_user.role == 'admin' %}bg-danger{% elif current_user.role == 'creator' %}bg-warning{% else %}bg-info{% endif %} rounded-pill">
+                            {{ current_user.role }}
+                        </span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -42,11 +55,7 @@
                         <i class="bi bi-box-arrow-in-right me-1"></i> Login
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/register' in request.url.path %}active{% endif %}" href="/register">
-                        <i class="bi bi-person-plus me-1"></i> Register
-                    </a>
-                </li>
+
                 {% endif %}
             </ul>
         </div>

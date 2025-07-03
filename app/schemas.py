@@ -68,17 +68,20 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="User password, minimum 8 characters")
+    role: str = Field(default="inputter", description="User role: admin, creator, or inputter")
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     email: Optional[str] = None
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
+    role: Optional[str] = None
 
 class UserInDB(UserBase):
     id: int
     hashed_password: str
     is_active: bool = True
+    role: str = "inputter"  # Default role
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -88,6 +91,7 @@ class UserInDB(UserBase):
 class User(UserBase):
     id: int
     is_active: bool
+    role: str
 
     class Config:
         orm_mode = True

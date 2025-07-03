@@ -27,6 +27,7 @@ DQX/
 │   │   ├── query.py        # API routes for executing custom SQL queries
 │   │   ├── reference_tables.py # Routes for managing rule and source references
 │   │   ├── scheduler.py    # Routes for job scheduling
+│   │   ├── source_data_management.py # Routes for managing tables in the stg schema
 │   │   ├── sql_scripts.py  # API routes for managing and executing saved SQL scripts
 │   │   ├── stats.py        # Routes for statistics and visualization
 │   │   └── tables.py       # API routes for table browsing, data manipulation
@@ -40,6 +41,7 @@ DQX/
 │       ├── visualization.html    # Data visualization interface
 │       ├── scheduler.html  # Job scheduler interface
 │       ├── reference_tables.html # Reference tables management
+│       ├── source_data_management.html # Source data management interface
 │       ├── partials/       # Reusable template components
 │       └── sql_editor.html # SQL editor interface
 └── utils/
@@ -351,18 +353,26 @@ For more examples, see the `utils/logger_examples.py` file.
     *   Add, view, and delete source references
     *   Integration with bad detail query and visualization for improved data display
 
-### 5. Authentication and Authorization
+### 5. Authentication and Role-Based Authorization
 
-*   **Purpose**: Provides user authentication and authorization capabilities.
+*   **Purpose**: Provides user authentication and role-based access control.
 *   **Key Components**:
     *   `app/auth.py`: Core authentication logic.
     *   `app/dependencies_auth.py`: Authentication-related dependencies for routes.
-    *   `app/routes/auth.py`: API routes for login, registration, and user management.
+    *   `app/routes/auth.py`: API routes for login and user management.
+    *   `app/role_permissions.py`: Role-based access control functions.
+    *   `app/routes/admin.py`: Admin user management routes.
+    *   `app/templates/admin/user_management.html`: User management interface.
 *   **Key Features**:
     *   JWT-based token authentication
     *   Password hashing for security
+    *   Role-based access control with three roles:
+        *   **Admin**: Full access to all features including user management
+        *   **Creator**: Can create tables and insert data, but cannot manage users
+        *   **Inputter**: Read-only access, cannot create tables or insert data
     *   Login/logout functionality
     *   User profile management
+    *   Admin user management interface
 
 ### 6. Improved Navigation and UI
 
@@ -375,6 +385,21 @@ For more examples, see the `utils/logger_examples.py` file.
     *   Consistent styling across all pages
     *   Improved typography and spacing
     *   Visual indicators for active page
+
+### 7. Source Data Management
+
+*   **Purpose**: Provides an interface for managing tables in the stg schema through SQL.
+*   **Key Components**:
+    *   `app/routes/source_data_management.py`: Contains endpoints for table operations in the stg schema.
+    *   `app/templates/source_data_management.html`: Frontend interface with tabbed UI for different operations.
+*   **Key Features**:
+    *   Create tables in the stg schema using SQL scripts
+    *   Insert data into existing stg tables
+    *   Truncate tables to quickly remove all data
+    *   Drop tables to completely remove them
+    *   View table data with a modal display
+    *   SQL editor with syntax highlighting using CodeMirror
+    *   Table name validation for security
 
 ## Database Schema
 
@@ -429,9 +454,12 @@ For more examples, see the `utils/logger_examples.py` file.
        id SERIAL PRIMARY KEY,
        username VARCHAR(50) UNIQUE NOT NULL,
        email VARCHAR(100) UNIQUE NOT NULL,
-       hashed_password VARCHAR(100) NOT NULL,
+       full_name VARCHAR(100),
+       hashed_password VARCHAR(255) NOT NULL,
        is_active BOOLEAN DEFAULT TRUE,
-       is_admin BOOLEAN DEFAULT FALSE,
-       created_at TIMESTAMPTZ DEFAULT NOW()
+       role VARCHAR(20) NOT NULL DEFAULT 'inputter',
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW(),
+       CONSTRAINT users_role_check CHECK (role IN ('admin', 'creator', 'inputter'))
    );
    ```

@@ -97,94 +97,19 @@ def login(
 
 @public_router.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
-    """Render the registration page."""
-    return render_template("register.html", {"request": request})
+    """Registration is disabled. Redirect to login page."""
+    return RedirectResponse(
+        url="/login", 
+        status_code=status.HTTP_302_FOUND
+    )
 
 @public_router.post("/register", response_class=HTMLResponse)
-def register(
-    request: Request,
-    username: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-    full_name: str = Form(None),
-    db: PgConnection = Depends(get_db)
-):
-    """Process registration form submission."""
-    # Validate password match
-    if password != confirm_password:
-        return render_template(
-            "register.html", 
-            {
-                "request": request, 
-                "error": "Passwords don't match",
-                "username": username,
-                "email": email,
-                "full_name": full_name
-            },
-            status_code=400
-        )
-    
-    # Validate password length
-    if len(password) < 8:
-        return render_template(
-            "register.html", 
-            {
-                "request": request, 
-                "error": "Password must be at least 8 characters",
-                "username": username,
-                "email": email,
-                "full_name": full_name
-            },
-            status_code=400
-        )
-    
-    # Check if username or email already exists
-    if crud.get_user_by_username(db, username):
-        return render_template(
-            "register.html", 
-            {
-                "request": request, 
-                "error": f"Username '{username}' already exists",
-                "email": email,
-                "full_name": full_name
-            },
-            status_code=400
-        )
-        
-    if crud.get_user_by_email(db, email):
-        return render_template(
-            "register.html", 
-            {
-                "request": request, 
-                "error": f"Email '{email}' already exists",
-                "username": username,
-                "full_name": full_name
-            },
-            status_code=400
-        )
-    
-    try:
-        # Create new user
-        crud.create_user(db, username, email, password, full_name)
-        
-        # Redirect to login page
-        return RedirectResponse(
-            url="/login?next=/", 
-            status_code=status.HTTP_302_FOUND
-        )
-    except Exception as e:
-        return render_template(
-            "register.html", 
-            {
-                "request": request, 
-                "error": f"Registration failed: {str(e)}",
-                "username": username,
-                "email": email,
-                "full_name": full_name
-            },
-            status_code=400
-        )
+def register(request: Request):
+    """Registration is disabled. Redirect to login page."""
+    return RedirectResponse(
+        url="/login", 
+        status_code=status.HTTP_302_FOUND
+    )
 
 @public_router.get("/logout")
 def logout():
