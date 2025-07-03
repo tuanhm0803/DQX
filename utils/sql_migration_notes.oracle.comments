@@ -1,0 +1,67 @@
+/**
+ * PostgreSQL to Oracle Migration - Changes Required
+ * 
+ * Changes needed for SQL scripts and database schemas:
+ * 
+ * 1. Table creation syntax:
+ *    - PostgreSQL: 
+ *      CREATE TABLE IF NOT EXISTS dq.users (
+ *          id SERIAL PRIMARY KEY,
+ *          username VARCHAR(50) NOT NULL UNIQUE,
+ *          ...
+ *      );
+ *      
+ *    - Oracle: 
+ *      -- Create sequence first
+ *      CREATE SEQUENCE dq.users_seq START WITH 1 INCREMENT BY 1;
+ *      
+ *      -- Create table
+ *      CREATE TABLE dq.users (
+ *          id NUMBER(10) PRIMARY KEY,
+ *          username VARCHAR2(50) NOT NULL UNIQUE,
+ *          ...
+ *      );
+ *      
+ *      -- Create trigger for auto-increment
+ *      CREATE OR REPLACE TRIGGER dq.users_bir
+ *      BEFORE INSERT ON dq.users
+ *      FOR EACH ROW
+ *      WHEN (new.id IS NULL)
+ *      BEGIN
+ *          SELECT users_seq.NEXTVAL INTO :new.id FROM dual;
+ *      END;
+ *
+ * 2. Data types mapping:
+ *    - SERIAL -> NUMBER with SEQUENCE
+ *    - VARCHAR -> VARCHAR2
+ *    - TEXT -> CLOB or VARCHAR2(4000)
+ *    - BOOLEAN -> NUMBER(1)
+ *    - TIMESTAMPTZ -> TIMESTAMP WITH TIME ZONE
+ *    - INTEGER -> NUMBER(10)
+ *    - JSONB -> CLOB (with application-level JSON handling)
+ *
+ * 3. Default values:
+ *    - PostgreSQL: created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ *    - Oracle: created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+ *
+ * 4. Index creation:
+ *    - PostgreSQL: CREATE INDEX IF NOT EXISTS idx_name ON table(column);
+ *    - Oracle: No IF NOT EXISTS, need to check if index exists first:
+ *      
+ *      BEGIN
+ *          EXECUTE IMMEDIATE 'CREATE INDEX idx_name ON table(column)';
+ *      EXCEPTION
+ *          WHEN OTHERS THEN
+ *              IF SQLCODE != -955 THEN
+ *                  RAISE;
+ *              END IF;
+ *      END;
+ *
+ * 5. Schema handling:
+ *    - PostgreSQL uses schemas directly
+ *    - Oracle may require creating user/schema first, then granting permissions
+ *
+ * 6. Case sensitivity:
+ *    - PostgreSQL identifiers are case-insensitive unless quoted
+ *    - Oracle stores identifiers in UPPERCASE unless quoted
+ */

@@ -1,0 +1,36 @@
+/**
+ * PostgreSQL to Oracle Migration - Changes Required
+ * 
+ * Changes needed for user_crud.py:
+ * 
+ * 1. Replace imports:
+ *    - From: import psycopg2
+ *           from psycopg2.extensions import connection as PgConnection
+ *           from psycopg2 import sql
+ *    - To:   import oracledb
+ *           from typing import Any as OracleConnection  # For type hinting
+ *
+ * 2. Update parameter binding:
+ *    - PostgreSQL: Uses %s placeholders
+ *    - Oracle: Uses :1, :2, :name placeholders
+ *
+ * 3. Update RETURNING clauses:
+ *    - PostgreSQL: "INSERT INTO dq.users (...) VALUES (...) RETURNING id, username, ..."
+ *    - Oracle: Either use sequences and separate queries, or bind variables with RETURNING INTO
+ *
+ * 4. Handle exception types:
+ *    - Replace psycopg2.Error with oracledb.Error
+ *    - Update unique constraint violation detection logic
+ *
+ * 5. Update date handling:
+ *    - PostgreSQL: NOW() function
+ *    - Oracle: SYSDATE or CURRENT_TIMESTAMP
+ *
+ * 6. Handle ID generation differently:
+ *    - PostgreSQL: SERIAL columns auto-generate IDs
+ *    - Oracle: Use sequences and trigger, or manually select sequence.nextval
+ *
+ * 7. Boolean handling:
+ *    - PostgreSQL: Native boolean type (TRUE, FALSE)
+ *    - Oracle: NUMBER(1) with 1 for true, 0 for false
+ */

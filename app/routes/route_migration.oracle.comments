@@ -1,0 +1,39 @@
+/**
+ * PostgreSQL to Oracle Migration - Changes Required
+ * 
+ * Changes needed for application routes (FastAPI routes):
+ * 
+ * 1. Type annotations:
+ *    - Replace: db: PgConnection = Depends(get_db)
+ *    - With: db: Any = Depends(get_db)  # or create a custom OracleConnection type
+ *
+ * 2. SQL query differences:
+ *    - information_schema queries differ between PostgreSQL and Oracle
+ *    - Oracle uses ALL_TABLES, USER_TABLES instead of information_schema
+ *
+ * 3. Parameter binding in raw SQL:
+ *    - PostgreSQL: cursor.execute("SELECT * FROM table WHERE id = %s", (id,))
+ *    - Oracle: cursor.execute("SELECT * FROM table WHERE id = :1", [id])
+ *
+ * 4. Pagination:
+ *    - Replace LIMIT/OFFSET with Oracle pagination
+ *    - For newer Oracle: OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+ *    - For older Oracle: ROW_NUMBER() or ROWNUM approaches
+ *
+ * 5. Schema references:
+ *    - Update schema.table references to match Oracle conventions
+ *    - Be careful with case sensitivity
+ *
+ * 6. Table existence checks:
+ *    - PostgreSQL: 
+ *      SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'stg' AND table_name = %s)
+ *    - Oracle:
+ *      SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = 'STG' AND TABLE_NAME = :1
+ *
+ * 7. Dynamic SQL handling:
+ *    - Replace psycopg2 sql module with Oracle-compatible dynamic SQL
+ *
+ * 8. UPDATE returning clause:
+ *    - PostgreSQL: UPDATE table SET col = %s WHERE id = %s RETURNING *
+ *    - Oracle: Use explicit SELECT after UPDATE, or RETURNING INTO with bind variables
+ */

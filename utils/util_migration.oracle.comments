@@ -1,0 +1,35 @@
+/**
+ * PostgreSQL to Oracle Migration - Changes Required
+ * 
+ * Changes needed for utility scripts:
+ * 
+ * 1. Replace imports:
+ *    - From: import psycopg2
+ *    - To:   import oracledb
+ *
+ * 2. Update connection handling:
+ *    - PostgreSQL: conn = psycopg2.connect(DATABASE_URL)
+ *    - Oracle: conn = oracledb.connect(user=user, password=pwd, dsn=dsn)
+ *
+ * 3. Update error handling:
+ *    - Replace: except psycopg2.Error as e:
+ *    - With:   except oracledb.Error as e:
+ *
+ * 4. Update script execution:
+ *    - Oracle may handle multi-statement scripts differently
+ *    - May need to split statements and execute separately
+ *    - Add explicit commit after each statement or block of statements
+ *
+ * 5. Update utility functions:
+ *    - create_users_table()
+ *    - add_user_roles() 
+ *    - create_admin_user() 
+ *    - Other utility functions that interact with the database
+ *
+ * 6. SQL script execution:
+ *    - May need to modify how SQL scripts are read and executed
+ *    - Handle Oracle's requirement for statement terminators
+ *
+ * 7. Transaction handling:
+ *    - Ensure proper commit/rollback in try/except blocks
+ */
