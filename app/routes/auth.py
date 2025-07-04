@@ -3,9 +3,11 @@ Authentication routes for DQX
 """
 
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, Form, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, status, Response, Cookie
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from typing import Optional
+from jose import JWTError, jwt
 from psycopg2.extensions import connection as PgConnection
 
 from app import crud
@@ -16,7 +18,7 @@ from app.models import User
 from app.schemas import Token, UserCreate
 
 # Constants
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Changed from 30 to 60 minutes (1 hour)
 
 # Routers - split into public (no auth) and protected (requires auth)
 public_router = APIRouter(tags=["Authentication - Public"]) 
@@ -125,3 +127,40 @@ def profile_page(request: Request, current_user: User = Depends(get_current_acti
         "profile.html", 
         {"request": request, "user": current_user}
     )
+
+@public_router.get("/api/auth/session-check")
+def check_session_status(
+    access_token: Optional[str] = Cookie(None),
+    db: PgConnection = Depends(get_db)
+):
+    """
+    Check if the current session is valid.
+    Returns a JSON response with a valid flag.
+    Used by the frontend to check if the session is still active.
+    """
+    if not access_token:
+        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"valid": False})
+    
+    # Extract the token from the "Bearer <token>" format
+    if access_token.startswith("Bearer "):
+        token = access_token[7:]
+    else:
+        token = access_token
+    
+    try:
+        # Verify the token
+        from app.auth import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        
+        if username is None:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"valid": False})
+            
+        # Check if user exists
+        user = crud.get_user_by_username(db, username)
+        if user is None or not user.is_active:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"valid": False})
+            
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"valid": True})
+    except JWTError:
+        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"valid": False})

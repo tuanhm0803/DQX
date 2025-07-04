@@ -10,6 +10,10 @@ A FastAPI application for exploring and querying databases with a web interface.
 - **Visualizations**: Graphical representation of bad details data
 - **Job Scheduling**: Schedule SQL scripts using daily, weekly, or monthly patterns
 - **User Management**: Role-based authentication (admin, creator, inputter roles)
+- **Security**: 
+  - Session timeout after 1 hour of inactivity
+  - Automatic login modal for expired sessions
+  - All pages protected by authentication except the main page
 
 ## Features
 

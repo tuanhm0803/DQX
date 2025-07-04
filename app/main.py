@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 import os
 from app import crud
 from app.database import get_db
@@ -72,6 +73,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Add middlewares
 app.add_middleware(UserMiddleware)  # Add this first to have user in all requests
 
+# Session middleware (with 1 hour timeout - 3600 seconds)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="DQX_SECRET_KEY",
+    max_age=3600,  # 1 hour in seconds
+    session_cookie="session"
+)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -121,13 +130,49 @@ async def chrome_devtools_config():
     """
     return {}
 
+# Auth check middleware for all routes except root ("/")
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Skip auth check for root, login, logout, register, token, and static files
+    path = request.url.path
+    if (path == "/" or 
+        path.startswith("/login") or 
+        path.startswith("/logout") or 
+        path.startswith("/register") or 
+        path.startswith("/token") or 
+        path.startswith("/static") or
+        path.startswith("/api/auth/session-check")):
+        return await call_next(request)
+    
+    # For all other routes, verify the user is logged in
+    user = None
+    try:
+        # Check for user in request state (set by UserMiddleware)
+        if hasattr(request.state, "user"):
+            user = request.state.user
+    except Exception:
+        pass
+        
+    # If no user is found, and it's an API call, return 401
+    if user is None and path.startswith("/api/"):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authentication required"}
+        )
+    
+    # Otherwise, continue to the next middleware or handler
+    return await call_next(request)
+
 # Page Endpoints
 @app.get("/", response_class=HTMLResponse)
 async def read_root(
-    request: Request, 
-    user = Depends(login_required),
+    request: Request,
     db: PgConnection = Depends(get_db)
 ):
+    """
+    Main page - accessible without authentication.
+    All other pages require login with a 1-hour session timeout.
+    """
     script_count = crud.get_script_count(db)
     bad_detail_count = crud.get_bad_detail_count(db)
     stats_data = {"script_count": script_count, "bad_detail_count": bad_detail_count}

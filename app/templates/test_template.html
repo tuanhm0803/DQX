@@ -1,10 +1,9 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Template</title>
-</head>
-<body>
-    <h1>Test Template</h1>
+{{ extends "base_layout.html" }}
+
+{{ block title }}Test Template{{ endblock }}
+
+{{ block content }}
+<h1>Test Template</h1>
     <p>This is a test</p>
-</body>
-</html>
+{{ endblock }}
+

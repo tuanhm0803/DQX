@@ -1,18 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DQX - Job Scheduler</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
-</head>
-<body>
-    {% include "partials/main_nav.html" %}
-    
-    <div class="container mt-5 pt-3">
-        <div class="mt-4 mb-4 text-end">
+{% extends "base_layout.html" %}
+
+{% block title %}DQX - Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="mt-4 mb-4 text-end">
             <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
                 <i class="bi bi-house-door"></i> Back to Main Page
             </a>
@@ -118,8 +109,10 @@
                 </div>
             </div>
         </div>
+{{ endblock }}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{{ block scripts }}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // Handle schedule type change event
@@ -160,5 +153,4 @@
             {% endif %}
         });
     </script>
-</body>
-</html>
+{% endblock %}

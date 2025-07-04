@@ -373,6 +373,10 @@ For more examples, see the `utils/logger_examples.py` file.
     *   Login/logout functionality
     *   User profile management
     *   Admin user management interface
+    *   Session timeout after 1 hour of inactivity
+    *   Session protection for all pages except the main landing page
+    *   Automatic login modal popup for expired sessions or unauthenticated users
+    *   Middleware-based authentication verification for all protected routes
 
 ### 6. Improved Navigation and UI
 

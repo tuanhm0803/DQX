@@ -1,0 +1,101 @@
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="loginModalLabel">Session Expired</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-4">
+          <i class="bi bi-shield-lock text-warning" style="font-size: 3rem;"></i>
+          <h4 class="mt-3">Your session has expired</h4>
+          <p class="text-muted">Please log in again to continue using the application.</p>
+        </div>
+        
+        <div id="login-modal-error" class="alert alert-danger d-none">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i> <span id="login-error-message"></span>
+        </div>
+        
+        <form id="login-modal-form">
+          <input type="hidden" name="next" id="login-next-url" value="">
+          
+          <div class="form-floating mb-3">
+            <input type="text" class="form-control" id="modal-username" placeholder="Username" name="username" required>
+            <label for="modal-username">Username</label>
+          </div>
+          
+          <div class="form-floating mb-4">
+            <input type="password" class="form-control" id="modal-password" placeholder="Password" name="password" required>
+            <label for="modal-password">Password</label>
+          </div>
+          
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg" id="modal-login-button">
+              <span class="spinner-border spinner-border-sm d-none me-2" id="modal-login-spinner" role="status" aria-hidden="true"></span>
+              <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal JavaScript -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Set the current URL as the next parameter
+    document.getElementById('login-next-url').value = window.location.pathname + window.location.search;
+    
+    // Login form submission
+    document.getElementById('login-modal-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const username = document.getElementById('modal-username').value;
+      const password = document.getElementById('modal-password').value;
+      const nextUrl = document.getElementById('login-next-url').value;
+      
+      // Show spinner
+      document.getElementById('modal-login-spinner').classList.remove('d-none');
+      document.getElementById('modal-login-button').setAttribute('disabled', 'true');
+      
+      // Clear previous errors
+      document.getElementById('login-modal-error').classList.add('d-none');
+      
+      // Send login request
+      fetch('/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          'username': username,
+          'password': password,
+          'next': nextUrl
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.text().then(text => {
+            throw new Error('Invalid username or password');
+          });
+        }
+        return response.text();
+      })
+      .then(data => {
+        // Successful login, reload the page
+        window.location.reload();
+      })
+      .catch(error => {
+        // Show error
+        document.getElementById('login-error-message').textContent = error.message;
+        document.getElementById('login-modal-error').classList.remove('d-none');
+        
+        // Hide spinner
+        document.getElementById('modal-login-spinner').classList.add('d-none');
+        document.getElementById('modal-login-button').removeAttribute('disabled');
+      });
+    });
+  });
+</script>
