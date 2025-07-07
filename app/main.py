@@ -104,8 +104,6 @@ app.include_router(sql_scripts.api_router, prefix="/api/scripts", tags=["API - S
 app.include_router(stats.router, prefix="/api/stats", tags=["API - Stats"], dependencies=[Depends(login_required)])
 app.include_router(scheduler.router, prefix="/api/schedules", tags=["API - Schedules"], dependencies=[Depends(login_required)])
 # Chat logger functionality has been removed
-from app.routes.test_route import test_router
-app.include_router(test_router) # Test router for debugging
 
 # Include Page routers (protected by login_required)
 app.include_router(sql_scripts.page_router, tags=["Pages"], dependencies=[Depends(login_required)])

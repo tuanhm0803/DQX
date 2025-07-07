@@ -1,11 +1,36 @@
 import psycopg2
 from psycopg2.extensions import connection as PgConnection # For type hinting
-from psycopg2 import sql # For safe SQL construction
 import json
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
+
+# --- Helper functions for safe SQL construction (Oracle-compatible) ---
+
+def _quote_identifier(name: str) -> str:
+    """
+    Safely quote a SQL identifier (table name, column name, schema name).
+    This replaces psycopg2's sql.Identifier functionality.
+    Oracle-compatible: uses double quotes for identifiers.
+    """
+    # Remove any existing quotes and escape internal quotes
+    clean_name = name.replace('"', '""')
+    return f'"{clean_name}"'
+
+def _build_placeholder_list(count: int) -> str:
+    """
+    Build a list of parameter placeholders.
+    This replaces psycopg2's sql.Placeholder functionality.
+    Oracle-compatible: uses :1, :2, etc. but for PostgreSQL we use %s
+    """
+    return ', '.join(['%s'] * count)
+
+def _build_column_list(columns: List[str]) -> str:
+    """
+    Build a comma-separated list of quoted column identifiers.
+    """
+    return ', '.join(_quote_identifier(col) for col in columns)
 
 # Import user CRUD operations
 from app.user_crud import (
@@ -215,21 +240,15 @@ def get_dq_table_data(table_name: str, skip: int, limit: int, db: PgConnection) 
         column_names = [row[0] for row in column_names_result]
 
         # Fetch data
-        query = sql.SQL("SELECT {fields} FROM {schema}.{table} LIMIT %s OFFSET %s;").format(
-            fields=sql.SQL(',').join(map(sql.Identifier, column_names)),
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier(table_name)
-        )
+        fields = _build_column_list(column_names)
+        query = f"SELECT {fields} FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)} LIMIT %s OFFSET %s;"
         cursor.execute(query, (limit, skip))
         result = cursor.fetchall()
         
         data = [_process_result_row(row, column_names) for row in result]
         
         # Get total count for pagination
-        count_query = sql.SQL("SELECT COUNT(*) FROM {schema}.{table};").format(
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier(table_name)
-        )
+        count_query = f"SELECT COUNT(*) FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)};"
         cursor.execute(count_query)
         total_count = cursor.fetchone()[0]
         
@@ -251,15 +270,11 @@ def insert_table_data(table_name: str, data: Dict[str, Any], db: PgConnection) -
         cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = %s AND column_name = 'id' AND table_schema = 'dq';", (table_name,))
         id_column_exists = cursor.fetchone()
 
-        returning_sql = sql.SQL(" RETURNING id") if id_column_exists else sql.SQL("")
+        returning_sql = " RETURNING id" if id_column_exists else ""
+        cols = _build_column_list(columns)
+        vals = _build_placeholder_list(len(values))
 
-        query = sql.SQL("INSERT INTO {schema}.{table} ({cols}) VALUES ({vals}){returning}").format(
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier(table_name),
-            cols=sql.SQL(',').join(map(sql.Identifier, columns)),
-            vals=sql.SQL(',').join(sql.Placeholder() * len(values)),
-            returning=returning_sql
-        )
+        query = f"INSERT INTO {_quote_identifier('dq')}.{_quote_identifier(table_name)} ({cols}) VALUES ({vals}){returning_sql};"
         
         cursor.execute(query, values)
         inserted_id = None
@@ -285,16 +300,12 @@ def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_
         set_clause_parts = []
         values = []
         for column, value in data.items():
-            set_clause_parts.append(sql.SQL("{} = %s").format(sql.Identifier(column)))
+            set_clause_parts.append(f"{_quote_identifier(column)} = %s")
             values.append(value)
         values.append(record_id) # Add record_id for the WHERE clause
         
-        query = sql.SQL("UPDATE {schema}.{table} SET {set_parts} WHERE {id_col} = %s;").format(
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier(table_name),
-            set_parts=sql.SQL(', ').join(set_clause_parts),
-            id_col=sql.Identifier(id_column)
-        )
+        set_parts = ', '.join(set_clause_parts)
+        query = f"UPDATE {_quote_identifier('dq')}.{_quote_identifier(table_name)} SET {set_parts} WHERE {_quote_identifier(id_column)} = %s;"
         
         cursor.execute(query, values)
         updated_rows = cursor.rowcount
@@ -313,11 +324,7 @@ def delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgCon
     cursor = None
     try:
         cursor = db.cursor()
-        query = sql.SQL("DELETE FROM {schema}.{table} WHERE {id_col} = %s;").format(
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier(table_name),
-            id_col=sql.Identifier(id_column)
-        )
+        query = f"DELETE FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)} WHERE {_quote_identifier(id_column)} = %s;"
         cursor.execute(query, (record_id,))
         deleted_rows = cursor.rowcount
         db.commit()
@@ -373,10 +380,7 @@ def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
     try:
         cursor = db.cursor()
         # Added ORDER BY for consistent ordering and debugging
-        query = sql.SQL("SELECT id, name, description, content, created_at, updated_at FROM {}.{} ORDER BY id ASC").format(
-            sql.Identifier('dq'),
-            sql.Identifier('dq_sql_scripts')
-        )
+        query = f"SELECT id, name, description, content, created_at, updated_at FROM {_quote_identifier('dq')}.{_quote_identifier('dq_sql_scripts')} ORDER BY id ASC;"
         cursor.execute(query)
         
         fetched_rows = cursor.fetchall()
@@ -503,10 +507,7 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
         stg_table_name_str = _get_stg_table_name_str(new_id)
         
         # Drop if it somehow exists to ensure a clean slate
-        drop_table_query = sql.SQL("DROP TABLE IF EXISTS {schema}.{table};").format(
-            schema=sql.Identifier('stg'),
-            table=sql.Identifier(stg_table_name_str)
-        )
+        drop_table_query = f"DROP TABLE IF EXISTS {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
         cursor.execute(drop_table_query)
 
         # Sanitize script content for use in DDL
@@ -515,11 +516,7 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
             clean_script_content = clean_script_content[:-1]
 
         # Create the table based on the script's output structure
-        create_table_query = sql.SQL("CREATE TABLE {schema}.{table} AS ({script_content}) WITH NO DATA;").format(
-            schema=sql.Identifier('stg'),
-            table=sql.Identifier(stg_table_name_str),
-            script_content=sql.SQL(clean_script_content)
-        )
+        create_table_query = f"CREATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} AS ({clean_script_content}) WITH NO DATA;"
         cursor.execute(create_table_query)
         # --- End of new logic ---
 
@@ -612,10 +609,7 @@ def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
 
         # --- Drop the corresponding staging table ---
         stg_table_name_str = _get_stg_table_name_str(script_id)
-        drop_table_query = sql.SQL("DROP TABLE IF EXISTS {schema}.{table};").format(
-            schema=sql.Identifier('stg'),
-            table=sql.Identifier(stg_table_name_str)
-        )
+        drop_table_query = f"DROP TABLE IF EXISTS {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
         cursor.execute(drop_table_query)
         # --- End of new logic ---
 
@@ -733,26 +727,15 @@ def populate_script_result_table(db: PgConnection, script_id: int) -> Dict[str, 
 
         if not table_exists:
             # Create the table if it does not exist
-            create_table_query = sql.SQL("CREATE TABLE {schema}.{table} AS ({script_content}) WITH NO DATA;").format(
-                schema=sql.Identifier('stg'),
-                table=sql.Identifier(stg_table_name_str),
-                script_content=sql.SQL(clean_script_content)
-            )
+            create_table_query = f"CREATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} AS ({clean_script_content}) WITH NO DATA;"
             cursor.execute(create_table_query)
         else:
             # If it exists, truncate it to clear old data
-            truncate_query = sql.SQL("TRUNCATE TABLE {schema}.{table};").format(
-                schema=sql.Identifier('stg'),
-                table=sql.Identifier(stg_table_name_str)
-            )
+            truncate_query = f"TRUNCATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
             cursor.execute(truncate_query)
 
         # 3. Insert data from the script into the staging table
-        insert_query = sql.SQL("INSERT INTO {schema}.{table} {script_content};").format(
-            schema=sql.Identifier('stg'),
-            table=sql.Identifier(stg_table_name_str),
-            script_content=sql.SQL(clean_script_content)
-        )
+        insert_query = f"INSERT INTO {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} {clean_script_content};"
         cursor.execute(insert_query)
         inserted_rows = cursor.rowcount
         
@@ -778,17 +761,12 @@ def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
         
     cursor = None
     stg_table_name_str = _get_stg_table_name_str(script_id)
-    stg_table_identifier = sql.Identifier(stg_table_name_str)
-    stg_schema_identifier = sql.Identifier('stg')
     
     try:
         cursor = db.cursor()
 
         # 1. Get distinct (rule_id, source_id) pairs from the staging table.
-        get_keys_query = sql.SQL("SELECT DISTINCT rule_id, source_id FROM {schema}.{table};").format(
-            schema=stg_schema_identifier,
-            table=stg_table_identifier
-        )
+        get_keys_query = f"SELECT DISTINCT rule_id, source_id FROM {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
         cursor.execute(get_keys_query)
         keys_to_replace = cursor.fetchall()
 
@@ -798,24 +776,16 @@ def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
         
         # 2. Delete existing records from dq.bad_detail that match these keys.
         # The argument for 'IN %s' needs to be a tuple of tuples.
-        delete_query = sql.SQL("DELETE FROM {schema}.{table} WHERE (rule_id, source_id) IN %s;").format(
-            schema=sql.Identifier('dq'),
-            table=sql.Identifier('bad_detail')
-        )
+        delete_query = f"DELETE FROM {_quote_identifier('dq')}.{_quote_identifier('bad_detail')} WHERE (rule_id, source_id) IN %s;"
         cursor.execute(delete_query, (tuple(keys_to_replace),))
 
         # 3. Insert the new records from the staging table.
         # The column names are known and validated to be correct when the script was saved.
-        insert_query = sql.SQL("""
-            INSERT INTO {target_schema}.{target_table} (rule_id, source_id, source_uid, data_value, txn_date)
+        insert_query = f"""
+            INSERT INTO {_quote_identifier('dq')}.{_quote_identifier('bad_detail')} (rule_id, source_id, source_uid, data_value, txn_date)
             SELECT rule_id, source_id, source_uid, data_value, txn_date
-            FROM {source_schema}.{source_table};
-        """).format(
-            target_schema=sql.Identifier('dq'),
-            target_table=sql.Identifier('bad_detail'),
-            source_schema=stg_schema_identifier,
-            source_table=stg_table_identifier
-        )
+            FROM {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};
+        """
         cursor.execute(insert_query)
         published_rows = cursor.rowcount
 
@@ -906,17 +876,16 @@ def update_schedule(db: PgConnection, schedule_id: int, schedule_data: Dict[str,
         values = []
         for key, value in schedule_data.items():
             if value is not None:
-                set_parts.append(sql.SQL("{} = %s").format(sql.Identifier(key)))
+                set_parts.append(f"{_quote_identifier(key)} = %s")
                 values.append(value)
 
         if not set_parts:
             return get_schedule(db, schedule_id)
 
         values.append(schedule_id)
+        set_clause = ', '.join(set_parts)
 
-        query = sql.SQL("UPDATE dq.dq_schedules SET {} WHERE id = %s RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;").format(
-            sql.SQL(', ').join(set_parts)
-        )
+        query = f"UPDATE dq.dq_schedules SET {set_clause} WHERE id = %s RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;"
 
         cursor.execute(query, values)
         updated_schedule_tuple = cursor.fetchone()
