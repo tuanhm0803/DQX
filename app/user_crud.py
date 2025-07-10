@@ -4,7 +4,6 @@ Adding these separate from the main crud.py to avoid disrupting the existing cod
 """
 
 import psycopg2
-from psycopg2.extensions import connection as PgConnection
 from psycopg2 import sql
 from datetime import datetime
 from app.models import User
@@ -13,7 +12,7 @@ from typing import Optional
 
 # --- User Management Functions ---
 
-def create_user(db: PgConnection, username: str, email: str, password: str, 
+def create_user(db, username: str, email: str, password: str, 
                full_name: Optional[str] = None, role: str = "inputter") -> User:
     """
     Create a new user in the database with the specified role.
@@ -26,7 +25,7 @@ def create_user(db: PgConnection, username: str, email: str, password: str,
         
     cursor = db.cursor()
     hashed_password = get_password_hash(password)
-    now = datetime.now()
+    now = datetime.now().replace(tzinfo=None)  # Remove timezone info for Oracle compatibility
     
     try:
         cursor.execute(
@@ -65,7 +64,7 @@ def create_user(db: PgConnection, username: str, email: str, password: str,
     finally:
         cursor.close()
 
-def get_user_by_id(db: PgConnection, user_id: int) -> Optional[User]:
+def get_user_by_id(db, user_id: int) -> Optional[User]:
     """
     Retrieve a user by their ID.
     Returns User object if found, None otherwise.
@@ -99,7 +98,7 @@ def get_user_by_id(db: PgConnection, user_id: int) -> Optional[User]:
     finally:
         cursor.close()
 
-def get_user_by_username(db: PgConnection, username: str) -> Optional[User]:
+def get_user_by_username(db, username: str) -> Optional[User]:
     """
     Retrieve a user by their username.
     Returns User object if found, None otherwise.
@@ -133,7 +132,7 @@ def get_user_by_username(db: PgConnection, username: str) -> Optional[User]:
     finally:
         cursor.close()
 
-def get_user_by_email(db: PgConnection, email: str) -> Optional[User]:
+def get_user_by_email(db, email: str) -> Optional[User]:
     """
     Retrieve a user by their email.
     Returns User object if found, None otherwise.
@@ -167,7 +166,7 @@ def get_user_by_email(db: PgConnection, email: str) -> Optional[User]:
     finally:
         cursor.close()
 
-def update_user(db: PgConnection, user_id: int, update_data: dict) -> Optional[User]:
+def update_user(db, user_id: int, update_data: dict) -> Optional[User]:
     """
     Update a user's information.
     Returns the updated User object if successful, None if the user doesn't exist.
@@ -190,7 +189,7 @@ def update_user(db: PgConnection, user_id: int, update_data: dict) -> Optional[U
         
         # Add updated_at timestamp
         update_fields.append("updated_at = %s")
-        params.append(datetime.now())
+        params.append(datetime.now().replace(tzinfo=None))  # Remove timezone info for Oracle compatibility
         
         # Add user_id for WHERE clause
         params.append(user_id)
@@ -227,7 +226,7 @@ def update_user(db: PgConnection, user_id: int, update_data: dict) -> Optional[U
     finally:
         cursor.close()
 
-def deactivate_user(db: PgConnection, user_id: int) -> bool:
+def deactivate_user(db, user_id: int) -> bool:
     """
     Deactivate a user (set is_active = False).
     Returns True if successful, False if the user doesn't exist.
@@ -240,7 +239,7 @@ def deactivate_user(db: PgConnection, user_id: int) -> bool:
             SET is_active = false, updated_at = %s
             WHERE id = %s
             """,
-            (datetime.now(), user_id)
+            (datetime.now().replace(tzinfo=None), user_id)  # Remove timezone info for Oracle compatibility
         )
         
         if cursor.rowcount == 0:
@@ -254,7 +253,7 @@ def deactivate_user(db: PgConnection, user_id: int) -> bool:
     finally:
         cursor.close()
 
-def get_users(db: PgConnection):
+def get_users(db):
     """
     Retrieve all users from the database.
     Returns a list of User objects.
@@ -289,7 +288,7 @@ def get_users(db: PgConnection):
     finally:
         cursor.close()
 
-def get_user(db: PgConnection, user_id: int) -> Optional[User]:
+def get_user(db, user_id: int) -> Optional[User]:
     """
     Retrieve a user by their ID.
     This is an alias for get_user_by_id for consistency in function naming.
@@ -297,7 +296,7 @@ def get_user(db: PgConnection, user_id: int) -> Optional[User]:
     """
     return get_user_by_id(db, user_id)
 
-def delete_user(db: PgConnection, user_id: int) -> bool:
+def delete_user(db, user_id: int) -> bool:
     """
     Delete a user from the database.
     Returns True if successful, False if the user doesn't exist.

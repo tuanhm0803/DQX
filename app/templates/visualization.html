@@ -1,338 +1,281 @@
-{{ extends "base_layout.html" }}
+{% extends "base_layout.html" %}
 
-{{ block title }}DQX - Data Visualization{{ endblock }}
+{% block title %}DQX - Data Visualization{% endblock %}
 
-{{ block head_extra }}
+{% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-{{ endblock }}
-
-{{ block content }}
-
-{{ endblock }}
-
-{{ block scripts }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
-    <style>
-        .chart-container {
-            position: relative;
-            height: 400px;
-            width: 100%;
-            margin-bottom: 2rem;
-        }
-        
-        .badge {
-            display: inline-block;
-            padding: 0.25em 0.4em;
-            font-size: 75%;
-            font-weight: 700;
-            line-height: 1;
-            text-align: center;
-            white-space: nowrap;
-            vertical-align: baseline;
-            border-radius: 0.25rem;
-        }
-    </style>
-</head>
-<body>
-    {% include "partials/main_nav.html" %}
+<style>
+    .chart-container {
+        position: relative;
+        height: 400px;
+        width: 100%;
+        margin-bottom: 2rem;
+    }
     
-    <div class="container mt-5 pt-3">
-        <div class="mt-4 mb-4 text-end">
-            <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
-                <i class="bi bi-house-door"></i> Back to Main Page
-            </a>
-        </div>
-    <div class="container">
-        <div class="glass-card p-4 mb-4 shadow">
-            <h1 class="h2 mb-3 text-center">DQ Error Visualization</h1>
-            <p class="text-center text-muted">Visual representation of bad details over time</p>
-        </div>
+    .badge {
+        display: inline-block;
+        padding: 0.25em 0.4em;
+        font-size: 75%;
+        font-weight: 700;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 0.25rem;
+    }
+</style>
+{% endblock %}
 
-        <div class="glass-card p-4 mb-4 shadow">
-            <h2 class="h4 mb-3">Filters</h2>
-            <form method="get">
-                <div class="row g-3 mb-3">
-                    <div class="col-md-3 mb-3">
-                        <select name="rule_id" class="form-select">
-                            <option value="">-- Select Rule --</option>
-                        <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
-                        {% if rule_ids %}
-                            {% for id_tuple in rule_ids %}
-                                <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == rule_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="" disabled>(no rules available)</option>
-                        {% endif %}
-                    </select>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                    <select name="source_id" class="form-select">
-                        <option value="">-- Select Source --</option>
-                        <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
-                        {% if source_ids %}
-                            {% for id_tuple in source_ids %}
-                                <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == source_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="" disabled>(no sources available)</option>
-                        {% endif %}
-                    </select>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" name="show_all" value="true" id="show_all" {% if show_all %}checked{% endif %}>
-                            <label class="form-check-label" for="show_all">Show All Records (max 1000)</label>
-                        </div>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-search me-1"></i> Apply Filters
-                        </button>
-                        <a href="/visualization" class="btn btn-secondary">
-                            <i class="bi bi-x-circle me-1"></i> Clear Filters
-                        </a>
-                    </div>
-                </div>
-            </form>
+{% block content %}
+<div class="mt-4 mb-4 text-end">
+    <a href="/" class="btn btn-outline-primary" style="border-radius: 8px;">
+        <i class="bi bi-house-door"></i> Back to Main Page
+    </a>
+</div>
 
-            {% if rule_id or source_id %}
-            <div class="mb-4 p-3 bg-light rounded">
-                <p class="small">
-                    <i class="bi bi-filter"></i> Filters applied:
-                    {% if rule_id %}
-                        <span class="badge bg-primary me-2">
-                            Rule: {% if rule_id == "All" %}All Rules{% else %}
-                                {% for id_tuple in rule_ids %}
-                                    {% if id_tuple[0]|string == rule_id|string %}{{ id_tuple[1] }}{% endif %}
-                                {% endfor %}
-                            {% endif %}
-                        </span>
+<div class="glass-card p-4 mb-4 shadow">
+    <h1 class="h2 mb-3 text-center">DQ Error Visualization</h1>
+    <p class="text-center text-muted">Visual representation of bad details over time</p>
+</div>
+
+<div class="glass-card p-4 mb-4 shadow">
+    <h2 class="h4 mb-3">Filters</h2>
+    <form method="get">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3 mb-3">
+                <select name="rule_id" class="form-select">
+                    <option value="">-- Select Rule --</option>
+                    <option value="All" {% if rule_id == "All" %}selected{% endif %}>All Rules</option>
+                    {% if rule_ids %}
+                        {% for id_tuple in rule_ids %}
+                            <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == rule_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="" disabled>(no rules available)</option>
                     {% endif %}
-                    {% if source_id %}
-                        <span class="badge bg-primary">
-                            Source: {% if source_id == "All" %}All Sources{% else %}
-                                {% for id_tuple in source_ids %}
-                                    {% if id_tuple[0]|string == source_id|string %}{{ id_tuple[1] }}{% endif %}
-                                {% endfor %}
-                            {% endif %}
-                        </span>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <select name="source_id" class="form-select">
+                    <option value="">-- Select Source --</option>
+                    <option value="All" {% if source_id == "All" %}selected{% endif %}>All Sources</option>
+                    {% if source_ids %}
+                        {% for id_tuple in source_ids %}
+                            <option value="{{ id_tuple[0] }}" {% if id_tuple[0]|string == source_id|string %}selected{% endif %}>{{ id_tuple[1] }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="" disabled>(no sources available)</option>
                     {% endif %}
-                    {% if show_all %}<span class="badge bg-purple-500 text-white px-2 py-1 rounded ml-2">Showing up to 1000 records</span>{% endif %}
-                </p>
+                </select>
             </div>
-            {% endif %}
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Chart 1: Bad Detail Counts by Date -->
-            <div class="glass-card p-6">
-                <h2 class="text-2xl font-bold mb-4">Bad Detail Counts by Date</h2>
-                <div class="chart-container">
-                    <canvas id="dateChart"></canvas>
+            <div class="col-md-3 mb-3">
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" name="show_all" value="true" id="show_all" {% if show_all %}checked{% endif %}>
+                    <label class="form-check-label" for="show_all">Show All Records (max 1000)</label>
                 </div>
-                {% if not chart_data.countByDate %}
-                    <div class="text-center p-10 bg-gray-800/50 rounded">
-                        <i class="bi bi-graph-up text-4xl text-gray-500"></i>
-                        <p class="mt-2 text-gray-400">No data available for the selected filters</p>
-                    </div>
-                {% endif %}
             </div>
-            
-            <!-- Chart 2: Bad Detail Counts by Rule -->
-            <div class="glass-card p-6">
-                <h2 class="text-2xl font-bold mb-4">Bad Detail Counts by Rule</h2>
-                <div class="chart-container">
-                    <canvas id="ruleChart"></canvas>
-                </div>
-                {% if not chart_data.countByRule %}
-                    <div class="text-center p-10 bg-gray-800/50 rounded">
-                        <i class="bi bi-bar-chart text-4xl text-gray-500"></i>
-                        <p class="mt-2 text-gray-400">No data available for the selected filters</p>
-                    </div>
-                {% endif %}
-            </div>
-            
-            <!-- Chart 3: Bad Detail Counts by Source -->
-            <div class="glass-card p-6 lg:col-span-2">
-                <h2 class="text-2xl font-bold mb-4">Bad Detail Counts by Source</h2>
-                <div class="chart-container">
-                    <canvas id="sourceChart"></canvas>
-                </div>
-                {% if not chart_data.countBySource %}
-                    <div class="text-center p-10 bg-gray-800/50 rounded">
-                        <i class="bi bi-pie-chart text-4xl text-gray-500"></i>
-                        <p class="mt-2 text-gray-400">No data available for the selected filters</p>
-                    </div>
-                {% endif %}
+            <div class="col-md-3 mb-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-search me-1"></i> Apply Filters
+                </button>
+                <a href="/visualization" class="btn btn-secondary">
+                    <i class="bi bi-x-circle me-1"></i> Clear Filters
+                </a>
             </div>
         </div>
+    </form>
 
-        <!-- Link to go to Bad Detail Query page -->
-        <div class="text-center mt-8">
-            <a href="/bad_detail_query{% if rule_id %}?rule_id={{ rule_id }}{% if source_id %}&source_id={{ source_id }}{% endif %}{% elif source_id %}?source_id={{ source_id }}{% endif %}" 
-               class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-2 px-6 rounded-full transition duration-300 inline-flex items-center">
-                <i class="bi bi-table mr-2"></i> View Detailed Records
-            </a>
+    {% if rule_id or source_id %}
+    <div class="mb-4 p-3 bg-light rounded">
+        <h5>Current Filters:</h5>
+        {% if rule_id and rule_id != "All" %}
+            <span class="badge bg-primary me-2">Rule: {{ rule_id }}</span>
+        {% endif %}
+        {% if source_id and source_id != "All" %}
+            <span class="badge bg-info me-2">Source: {{ source_id }}</span>
+        {% endif %}
+        {% if show_all %}
+            <span class="badge bg-warning me-2">Show All Records</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Charts Section -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="glass-card p-4 shadow">
+            <h3 class="h5 mb-3">Bad Details Over Time</h3>
+            <div class="chart-container">
+                <canvas id="timeChart"></canvas>
+            </div>
         </div>
     </div>
+    <div class="col-lg-6 mb-4">
+        <div class="glass-card p-4 shadow">
+            <h3 class="h5 mb-3">Bad Details by Rule</h3>
+            <div class="chart-container">
+                <canvas id="ruleChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
 
-    <script>
-        // Initialize charts when the page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize the charts if we have data
-            initializeCharts();
-        });
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="glass-card p-4 shadow">
+            <h3 class="h5 mb-3">Bad Details by Source</h3>
+            <div class="chart-container">
+                <canvas id="sourceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="glass-card p-4 shadow">
+            <h3 class="h5 mb-3">Statistics</h3>
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ total_records or 0 }}</div>
+                        <div class="stat-label">Total Bad Details</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ unique_rules or 0 }}</div>
+                        <div class="stat-label">Unique Rules</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-        function initializeCharts() {
-            // Only initialize charts if we have chart data
-            try {
-                const chartData = {{ chart_data | tojson }};
-                
-                // Check if we have date data
-                if (chartData.countByDate && chartData.countByDate.length > 0) {
-                    const dateCtx = document.getElementById('dateChart').getContext('2d');
-                    const labels = chartData.countByDate.map(item => item.date);
-                    const data = chartData.countByDate.map(item => item.count);
-                    
-                    new Chart(dateCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Bad Detail Count',
-                                data: data,
-                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                borderWidth: 2,
-                                fill: true,
-                                tension: 0.1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Error Count'
-                                    }
-                                },
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Date'
-                                    }
-                                }
-                            },
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            return `Count: ${context.raw}`;
-                                        }
-                                    }
-                                }
+<!-- Data Table -->
+{% if bad_details %}
+<div class="glass-card p-4 shadow">
+    <h3 class="h5 mb-3">Recent Bad Details</h3>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Rule ID</th>
+                    <th>Source ID</th>
+                    <th>Detail</th>
+                    <th>Created Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detail in bad_details[:20] %}
+                <tr>
+                    <td>{{ detail.rule_id }}</td>
+                    <td>{{ detail.source_id }}</td>
+                    <td>{{ detail.detail_text[:100] }}{% if detail.detail_text|length > 100 %}...{% endif %}</td>
+                    <td>{{ detail.created_date.strftime('%Y-%m-%d %H:%M') if detail.created_date else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if bad_details|length > 20 %}
+    <p class="text-muted">Showing first 20 of {{ bad_details|length }} records.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+
+    function initializeCharts() {
+        try {
+            // Time Chart
+            const timeCtx = document.getElementById('timeChart');
+            if (timeCtx) {
+                new Chart(timeCtx, {
+                    type: 'line',
+                    data: {
+                        labels: {{ time_labels|safe if time_labels else '[]' }},
+                        datasets: [{
+                            label: 'Bad Details Count',
+                            data: {{ time_data|safe if time_data else '[]' }},
+                            borderColor: 'rgb(75, 192, 192)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
                             }
                         }
-                    });
-                }
-                
-                // Check if we have rule data
-                if (chartData.countByRule && chartData.countByRule.length > 0) {
-                    const ruleCtx = document.getElementById('ruleChart').getContext('2d');
-                    const labels = chartData.countByRule.map(item => item.rule);
-                    const data = chartData.countByRule.map(item => item.count);
-                    
-                    new Chart(ruleCtx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Count by Rule',
-                                data: data,
-                                backgroundColor: labels.map((_, i) => 
-                                    `rgba(${155 + i * 20}, ${100 + i * 5}, ${255 - i * 10}, 0.7)`
-                                ),
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Error Count'
-                                    }
-                                },
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Rule ID'
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
-                
-                // Check if we have source data
-                if (chartData.countBySource && chartData.countBySource.length > 0) {
-                    const sourceCtx = document.getElementById('sourceChart').getContext('2d');
-                    const labels = chartData.countBySource.map(item => item.source);
-                    const data = chartData.countBySource.map(item => item.count);
-                    
-                    new Chart(sourceCtx, {
-                        type: 'pie',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: data,
-                                backgroundColor: [
-                                    'rgba(255, 99, 132, 0.7)',
-                                    'rgba(54, 162, 235, 0.7)',
-                                    'rgba(255, 206, 86, 0.7)',
-                                    'rgba(75, 192, 192, 0.7)',
-                                    'rgba(153, 102, 255, 0.7)',
-                                    'rgba(255, 159, 64, 0.7)',
-                                    'rgba(199, 199, 199, 0.7)',
-                                    'rgba(83, 102, 255, 0.7)',
-                                    'rgba(40, 159, 64, 0.7)',
-                                    'rgba(210, 199, 199, 0.7)'
-                                ],
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'right',
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const label = context.label || '';
-                                            const value = context.raw || 0;
-                                            const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                                            const percentage = ((value / total) * 100).toFixed(1);
-                                            return `${label}: ${value} (${percentage}%)`;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('Error initializing charts:', error);
+                    }
+                });
             }
+
+            // Rule Chart
+            const ruleCtx = document.getElementById('ruleChart');
+            if (ruleCtx) {
+                new Chart(ruleCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: {{ rule_labels|safe if rule_labels else '[]' }},
+                        datasets: [{
+                            label: 'Count by Rule',
+                            data: {{ rule_data|safe if rule_data else '[]' }},
+                            backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Source Chart
+            const sourceCtx = document.getElementById('sourceChart');
+            if (sourceCtx) {
+                new Chart(sourceCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: {{ source_labels|safe if source_labels else '[]' }},
+                        datasets: [{
+                            data: {{ source_data|safe if source_data else '[]' }},
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 205, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)',
+                                'rgba(255, 159, 64, 0.8)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error initializing charts:', error);
         }
-    </script>
-{{ endblock }}
+    }
+</script>
+{% endblock %}

@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import List, Optional
 from app import crud, schemas
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 from app.dependencies import templates, render_template
 
 # Router for API endpoints
@@ -18,7 +17,7 @@ SQL_EDITOR_TEMPLATE = "sql_editor.html"
 # --- Page Endpoints ---
 
 @page_router.get("/editor", response_class=HTMLResponse)
-async def sql_editor_page(request: Request, script_id: Optional[int] = None, db: PgConnection = Depends(get_db)):
+async def sql_editor_page(request: Request, script_id: Optional[int] = None, db = Depends(get_db)):
     # Fix for the decode attribute error by properly checking and converting script_id
     if script_id is not None:
         if isinstance(script_id, bytes):
@@ -46,7 +45,7 @@ async def save_script_form(
     name: str = Form(...),
     description: Optional[str] = Form(None),
     content: str = Form(...),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     script_data = schemas.SQLScriptCreate(name=name, description=description, content=content)
     if script_id:
@@ -59,7 +58,7 @@ async def save_script_form(
 async def execute_script_form(
     request: Request,
     content: str = Form(...),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     scripts = crud.get_sql_scripts(db)
     results = None
@@ -85,13 +84,13 @@ async def execute_script_form(
     })
 
 @page_router.get("/editor/delete/{script_id}")
-async def delete_script_form(script_id: int, db: PgConnection = Depends(get_db)):
+async def delete_script_form(script_id: int, db = Depends(get_db)):
     crud.delete_sql_script(db, script_id)
     return RedirectResponse(url="/editor", status_code=303)
 
 # Add populate and publish page routes
 @page_router.get("/editor/{script_id}/populate")
-async def populate_table_form(request: Request, script_id: int, db: PgConnection = Depends(get_db)):
+async def populate_table_form(request: Request, script_id: int, db = Depends(get_db)):
     try:
         # Get script name for better messaging
         selected_script = crud.get_sql_script(db, script_id)
@@ -128,7 +127,7 @@ async def populate_table_form(request: Request, script_id: int, db: PgConnection
         })
 
 @page_router.get("/editor/{script_id}/publish")
-async def publish_results_form(request: Request, script_id: int, db: PgConnection = Depends(get_db)):
+async def publish_results_form(request: Request, script_id: int, db = Depends(get_db)):
     try:
         # Get script name for better messaging
         selected_script = crud.get_sql_script(db, script_id)
@@ -167,33 +166,33 @@ async def publish_results_form(request: Request, script_id: int, db: PgConnectio
 # --- API Endpoints ---
 
 @api_router.get("/", response_model=List[schemas.SQLScript])
-def get_scripts(db: PgConnection = Depends(get_db)):
+def get_scripts(db = Depends(get_db)):
     return crud.get_sql_scripts(db)
 
 @api_router.get("/{script_id}", response_model=schemas.SQLScript)
-def get_script(script_id: int, db: PgConnection = Depends(get_db)):
+def get_script(script_id: int, db = Depends(get_db)):
     script = crud.get_sql_script(db, script_id)
     if script is None:
         raise HTTPException(status_code=404, detail="SQL script not found")
     return script
 
 @api_router.post("/", response_model=schemas.SQLScript)
-def create_script(script: schemas.SQLScriptCreate, db: PgConnection = Depends(get_db)):
+def create_script(script: schemas.SQLScriptCreate, db = Depends(get_db)):
     return crud.create_sql_script(db, script.model_dump())
 
 @api_router.put("/{script_id}", response_model=schemas.SQLScript)
-def update_script(script_id: int, script: schemas.SQLScriptCreate, db: PgConnection = Depends(get_db)):
+def update_script(script_id: int, script: schemas.SQLScriptCreate, db = Depends(get_db)):
     return crud.update_sql_script(db, script_id, script.model_dump())
 
 @api_router.delete("/{script_id}")
-def delete_script(script_id: int, db: PgConnection = Depends(get_db)):
+def delete_script(script_id: int, db = Depends(get_db)):
     result = crud.delete_sql_script(db, script_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail="SQL script not found")
     return {"message": "Script deleted successfully"}
 
 @api_router.post("/execute")
-def execute_script(request: schemas.SQLExecuteRequest, db: PgConnection = Depends(get_db)):
+def execute_script(request: schemas.SQLExecuteRequest, db = Depends(get_db)):
     try:
         return crud.execute_query(request.script_content, db)
     except Exception as e:
@@ -201,7 +200,7 @@ def execute_script(request: schemas.SQLExecuteRequest, db: PgConnection = Depend
 
 # Add populate and publish endpoints
 @api_router.post("/{script_id}/populate_table")
-def populate_table(script_id: int, db: PgConnection = Depends(get_db)):
+def populate_table(script_id: int, db = Depends(get_db)):
     """Populate the staging table for a specific SQL script"""
     try:
         result = crud.populate_script_result_table(db, script_id)
@@ -212,7 +211,7 @@ def populate_table(script_id: int, db: PgConnection = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 @api_router.post("/{script_id}/publish")
-def publish_results(script_id: int, db: PgConnection = Depends(get_db)):
+def publish_results(script_id: int, db = Depends(get_db)):
     """Publish results from the script's staging table to the main bad_detail table."""
     try:
         result = crud.publish_script_results(db, script_id)

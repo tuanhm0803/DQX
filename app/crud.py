@@ -1,10 +1,41 @@
 import psycopg2
-from psycopg2.extensions import connection as PgConnection # For type hinting
 import json
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
+import os
+
+# Get database type to handle Oracle-specific issues
+DB_TYPE = os.getenv("DB_TYPE", "postgresql")
+
+# --- Helper functions for database-agnostic operations ---
+
+def _get_current_timestamp():
+    """Get current timestamp in a database-agnostic way without timezone info"""
+    # Return naive datetime to avoid Oracle thin mode timezone issues
+    return datetime.now().replace(tzinfo=None)
+
+def _convert_query_for_database(query: str) -> str:
+    """Convert query syntax for the current database type"""
+    if DB_TYPE == "oracle":
+        # Replace NOW() with SYSDATE to avoid timezone issues in Oracle thin mode
+        query = query.replace("NOW()", "SYSDATE")
+        
+        # Convert LIMIT/OFFSET for Oracle
+        import re
+        limit_pattern = r'\s+LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?\s*;?\s*$'
+        match = re.search(limit_pattern, query, re.IGNORECASE)
+        if match:
+            limit = int(match.group(1))
+            offset = int(match.group(2)) if match.group(2) else 0
+            if offset > 0:
+                replacement = f' OFFSET {offset} ROWS FETCH FIRST {limit} ROWS ONLY'
+            else:
+                replacement = f' FETCH FIRST {limit} ROWS ONLY'
+            query = re.sub(limit_pattern, replacement, query, flags=re.IGNORECASE)
+    
+    return query
 
 # --- Helper functions for safe SQL construction (Oracle-compatible) ---
 
@@ -157,7 +188,7 @@ def _process_result_row(row: tuple, column_names: List[str]) -> Dict[str, Any]:
         return None
     return dict(zip(column_names, [_format_value_for_json(v) for v in row]))
 
-def get_script_count(db: PgConnection) -> int:
+def get_script_count(db) -> int:
     """Gets the total number of SQL scripts."""
     try:
         with db.cursor() as cursor:
@@ -168,7 +199,7 @@ def get_script_count(db: PgConnection) -> int:
         print(f"Error getting script count: {str(e)}")
         return 0  # Return 0 if there's an error (e.g., table doesn't exist)
 
-def get_bad_detail_count(db: PgConnection) -> int:
+def get_bad_detail_count(db) -> int:
     """Gets the total number of records in the bad_detail table."""
     try:
         with db.cursor() as cursor:
@@ -179,14 +210,14 @@ def get_bad_detail_count(db: PgConnection) -> int:
         print(f"Error getting bad_detail count: {str(e)}")
         return 0  # Return 0 if there's an error (e.g., table doesn't exist)
 
-def get_stats(db: PgConnection):
+def get_stats(db):
     script_count = get_script_count(db)
     bad_detail_count = get_bad_detail_count(db)
     return {"script_count": script_count, "bad_detail_count": bad_detail_count}
 
 # --- Table Operations ---
 
-def get_schemas(db: PgConnection) -> List[str]:
+def get_schemas(db) -> List[str]:
     """Get all schemas in the database"""
     cursor = None
     try:
@@ -200,7 +231,7 @@ def get_schemas(db: PgConnection) -> List[str]:
 
 # --- DQ Table Operations ---
 
-def get_dq_table_names(db: PgConnection) -> List[str]:
+def get_dq_table_names(db) -> List[str]:
     """Get all tables in the 'DQ' schema using the provided DB connection"""
     cursor = None
     try:
@@ -212,7 +243,7 @@ def get_dq_table_names(db: PgConnection) -> List[str]:
         if cursor:
             cursor.close()
 
-def get_dq_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[tuple]]:
+def get_dq_table_structure(table_name: str, db) -> Dict[str, List[tuple]]:
     """Get the structure of a specific table using the provided DB connection"""
     cursor = None
     try:
@@ -225,7 +256,7 @@ def get_dq_table_structure(table_name: str, db: PgConnection) -> Dict[str, List[
         if cursor:
             cursor.close()
 
-def get_dq_table_data(table_name: str, skip: int, limit: int, db: PgConnection) -> Dict[str, Any]:
+def get_dq_table_data(table_name: str, skip: int, limit: int, db) -> Dict[str, Any]:
     """Get data from a specific table with pagination using the provided DB connection"""
     cursor = None
     try:
@@ -257,7 +288,7 @@ def get_dq_table_data(table_name: str, skip: int, limit: int, db: PgConnection) 
         if cursor:
             cursor.close()
 
-def insert_table_data(table_name: str, data: Dict[str, Any], db: PgConnection) -> Dict[str, Any]:
+def insert_table_data(table_name: str, data: Dict[str, Any], db) -> Dict[str, Any]:
     """Insert data into a specific table using the provided DB connection"""
     cursor = None
     try:
@@ -291,7 +322,7 @@ def insert_table_data(table_name: str, data: Dict[str, Any], db: PgConnection) -
         if cursor:
             cursor.close()
 
-def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_column: str, db: PgConnection) -> Dict[str, Any]:
+def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_column: str, db) -> Dict[str, Any]:
     """Update data in a specific table by ID using the provided DB connection"""
     cursor = None
     try:
@@ -319,7 +350,7 @@ def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_
         if cursor:
             cursor.close()
 
-def delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgConnection) -> Dict[str, Any]:
+def delete_table_data(table_name: str, record_id: Any, id_column: str, db) -> Dict[str, Any]:
     """Delete data from a specific table by ID using the provided DB connection"""
     cursor = None
     try:
@@ -337,12 +368,8 @@ def delete_table_data(table_name: str, record_id: Any, id_column: str, db: PgCon
         if cursor:
             cursor.close()
 
-def execute_query(query_string: str, db: PgConnection, params=None) -> Dict[str, Any]:
+def execute_query(query_string: str, db, params=None) -> Dict[str, Any]:
     """Execute a custom SQL query (assumed SELECT) using the provided DB connection with optional parameters"""
-    # Hotfix to swap arguments if they are passed in the wrong order
-    if isinstance(query_string, PgConnection) and isinstance(db, str):
-        query_string, db = db, query_string
-        
     cursor = None
     if not query_string.strip().lower().startswith("select"):
         raise ValueError("Only SELECT queries are allowed for execute_query.")
@@ -374,7 +401,7 @@ def execute_query(query_string: str, db: PgConnection, params=None) -> Dict[str,
             cursor.close()
 
 # --- SQL Script Management Functions ---
-def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
+def get_sql_scripts(db) -> List[Dict[str, Any]]:
     """Get all saved SQL scripts from the database"""
     cursor = None
     try:
@@ -424,7 +451,7 @@ def get_sql_scripts(db: PgConnection) -> List[Dict[str, Any]]:
         if cursor:
             cursor.close()
 
-def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]:
+def get_sql_script(db, script_id: int) -> Optional[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
@@ -448,7 +475,7 @@ def get_sql_script(db: PgConnection, script_id: int) -> Optional[Dict[str, Any]]
         if cursor:
             cursor.close()
 
-def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str, Any]:
+def create_sql_script(db, script_data: Dict[str, Any]) -> Dict[str, Any]:
     """Creates a new SQL script and its corresponding staging table."""
     cursor = None
     try:
@@ -468,12 +495,13 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
         # --- End of new logic ---
 
         # Start transaction
+        current_time = _get_current_timestamp()
         query = """
             INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
-            VALUES (%s, %s, %s, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id, name, description, content, created_at, updated_at;
         """
-        cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content']))
+        cursor.execute(query, (script_data['name'], script_data.get('description'), script_data['content'], current_time, current_time))
         new_script_tuple = cursor.fetchone()
 
         if not new_script_tuple:
@@ -541,7 +569,7 @@ def create_sql_script(db: PgConnection, script_data: Dict[str, Any]) -> Dict[str
             cursor.close()
 
 
-def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def update_sql_script(db, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Updates an existing SQL script after validating its new content."""
     cursor = None
     try:
@@ -562,14 +590,15 @@ def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, A
         
         description = script_data.get('description')
         content = script_data['content']
+        current_time = _get_current_timestamp()
 
         query = """
             UPDATE dq.dq_sql_scripts
-            SET name = %s, description = %s, content = %s, updated_at = NOW()
+            SET name = %s, description = %s, content = %s, updated_at = %s
             WHERE id = %s
             RETURNING id, name, description, content, created_at, updated_at;
         """
-        cursor.execute(query, (name, description, content, script_id))
+        cursor.execute(query, (name, description, content, current_time, script_id))
         updated_script_tuple = cursor.fetchone()
 
         if not updated_script_tuple:
@@ -602,7 +631,7 @@ def update_sql_script(db: PgConnection, script_id: int, script_data: Dict[str, A
         if cursor:
             cursor.close()
 
-def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
+def delete_sql_script(db, script_id: int) -> Dict[str, Any]:
     cursor = None
     try:
         cursor = db.cursor()
@@ -628,7 +657,7 @@ def delete_sql_script(db: PgConnection, script_id: int) -> Dict[str, Any]:
         if cursor: cursor.close()
 
 
-def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
+def execute_sql_script(db, script_content: str) -> Dict[str, Any]:
     """
     Executes the provided SQL script content after validating its structure.
     This function needs to be carefully designed to prevent harmful operations.
@@ -690,15 +719,11 @@ def execute_sql_script(db: PgConnection, script_content: str) -> Dict[str, Any]:
             cursor.close()
 
 # --- New function for populating stg table ---
-def populate_script_result_table(db: PgConnection, script_id: int) -> Dict[str, Any]:
+def populate_script_result_table(db, script_id: int) -> Dict[str, Any]:
     """
     Executes a SQL script and inserts the results into its dedicated staging table.
     The staging table is created if it doesn't exist, and truncated before insertion.
     """
-    # Hotfix to swap arguments if they are passed in the wrong order
-    if isinstance(db, int) and isinstance(script_id, PgConnection):
-        db, script_id = script_id, db
-        
     cursor = None
     try:
         # 1. Get the script content
@@ -749,16 +774,12 @@ def populate_script_result_table(db: PgConnection, script_id: int) -> Dict[str, 
     finally:
         if cursor: cursor.close()
 
-def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
+def publish_script_results(db, script_id: int) -> Dict[str, Any]:
     """
     Publishes results from a script's staging table to the central dq.bad_detail table.
     For each (rule_id, source_id) pair in the staging table, it deletes existing
     records from dq.bad_detail and then inserts the new ones.
     """
-    # Hotfix to swap arguments if they are passed in the wrong order
-    if isinstance(db, int) and isinstance(script_id, PgConnection):
-        db, script_id = script_id, db
-        
     cursor = None
     stg_table_name_str = _get_stg_table_name_str(script_id)
     
@@ -801,7 +822,7 @@ def publish_script_results(db: PgConnection, script_id: int) -> Dict[str, Any]:
 
 # --- Schedule Management Functions ---
 
-def create_schedule(db: PgConnection, schedule: Dict[str, Any]) -> Dict[str, Any]:
+def create_schedule(db, schedule: Dict[str, Any]) -> Dict[str, Any]:
     """Creates a new schedule."""
     cursor = None
     try:
@@ -829,7 +850,7 @@ def create_schedule(db: PgConnection, schedule: Dict[str, Any]) -> Dict[str, Any
         if cursor:
             cursor.close()
 
-def get_schedules(db: PgConnection) -> List[Dict[str, Any]]:
+def get_schedules(db) -> List[Dict[str, Any]]:
     """Gets all schedules."""
     cursor = None
     try:
@@ -847,7 +868,7 @@ def get_schedules(db: PgConnection) -> List[Dict[str, Any]]:
         if cursor:
             cursor.close()
 
-def get_schedule(db: PgConnection, schedule_id: int) -> Optional[Dict[str, Any]]:
+def get_schedule(db, schedule_id: int) -> Optional[Dict[str, Any]]:
     """Gets a single schedule by its ID."""
     cursor = None
     try:
@@ -865,7 +886,7 @@ def get_schedule(db: PgConnection, schedule_id: int) -> Optional[Dict[str, Any]]
         if cursor:
             cursor.close()
 
-def update_schedule(db: PgConnection, schedule_id: int, schedule_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def update_schedule(db, schedule_id: int, schedule_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Updates an existing schedule."""
     cursor = None
     try:
@@ -900,7 +921,7 @@ def update_schedule(db: PgConnection, schedule_id: int, schedule_data: Dict[str,
         if cursor:
             cursor.close()
 
-def delete_schedule(db: PgConnection, schedule_id: int) -> Dict[str, Any]:
+def delete_schedule(db, schedule_id: int) -> Dict[str, Any]:
     """Deletes a schedule."""
     cursor = None
     try:

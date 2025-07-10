@@ -38,3 +38,28 @@ CREATE TABLE dq.users (
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_user_username ON dq.users(username);
 CREATE INDEX IF NOT EXISTS idx_user_email ON dq.users(email);
+
+;
+-- dq.source_ref definition
+
+-- Drop table
+
+-- DROP TABLE dq.source_ref;
+
+CREATE TABLE dq.source_ref (
+	source_id varchar(50) NULL,
+	source_name varchar(500) NULL,
+	source_desc varchar(2000) NULL
+);
+
+-- dq.rule_ref definition
+
+-- Drop table
+
+-- DROP TABLE dq.rule_ref;
+
+CREATE TABLE dq.rule_ref (
+	rule_id varchar(50) NULL,
+	rule_name varchar(500) NULL,
+	rule_desc varchar(2000) NULL
+);

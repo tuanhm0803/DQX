@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.database import get_db
 from app import crud
 import psycopg2  # For error handling
-from psycopg2.extensions import connection as PgConnection
 from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
@@ -11,7 +10,7 @@ class QueryRequest(BaseModel):
 router = APIRouter()
 
 @router.post("/")
-def execute_query(request: QueryRequest, db: PgConnection = Depends(get_db)):
+def execute_query(request: QueryRequest, db = Depends(get_db)):
     """Execute a custom SQL query (read-only)"""
     query = request.query
     if not query.strip().lower().startswith("select"):

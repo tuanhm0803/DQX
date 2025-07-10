@@ -8,7 +8,6 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from typing import Optional
 from jose import JWTError, jwt
-from psycopg2.extensions import connection as PgConnection
 
 from app import crud
 from app.auth import authenticate_user, create_access_token, get_current_active_user
@@ -28,7 +27,7 @@ protected_router = APIRouter(tags=["Authentication - Protected"])
 @public_router.post("/token", response_model=Token)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     OAuth2 compatible token login, returns an access token.
@@ -64,7 +63,7 @@ def login(
     username: str = Form(...),
     password: str = Form(...),
     next: str = Form("/"),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Process login form submission."""
     user = authenticate_user(db, username, password)
@@ -131,7 +130,7 @@ def profile_page(request: Request, current_user: User = Depends(get_current_acti
 @public_router.get("/api/auth/session-check")
 def check_session_status(
     access_token: Optional[str] = Cookie(None),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Check if the current session is valid.

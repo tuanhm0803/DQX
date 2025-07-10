@@ -5,7 +5,6 @@ from app.schemas import GenericModel, TableData
 from app import crud
 import logging
 import psycopg2
-from psycopg2.extensions import connection as PgConnection
 
 router = APIRouter()
 
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 TABLE_NOT_FOUND_ERROR = "Table not found"
 
 @router.get("/", response_model=List[str])
-def get_tables(db: PgConnection = Depends(get_db)):
+def get_tables(db = Depends(get_db)):
     """Get all tables in the 'DQ' schema"""
     cursor = None
     try:
@@ -35,7 +34,7 @@ def get_tables(db: PgConnection = Depends(get_db)):
             cursor.close()
 
 @router.get("/{table_name}/structure")
-def get_table_structure(table_name: str, db: PgConnection = Depends(get_db)):
+def get_table_structure(table_name: str, db = Depends(get_db)):
     """Get the structure of a specific table"""
     tables = crud.get_table_names(db)
     if table_name not in tables:
@@ -48,7 +47,7 @@ def get_table_data(
     table_name: str, 
     skip: int = 0, 
     limit: int = 100,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Get data from a specific table with pagination"""
     tables = crud.get_table_names(db)
@@ -61,7 +60,7 @@ def get_table_data(
 def insert_table_data(
     table_name: str, 
     item: GenericModel,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Insert data into a specific table"""
     tables = crud.get_table_names(db)
@@ -86,7 +85,7 @@ def update_table_data(
     record_id: int,
     item: GenericModel,
     id_column: str = "id",
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Update data in a specific table by ID"""
     tables = crud.get_table_names(db)
@@ -112,7 +111,7 @@ def delete_table_data(
     table_name: str,
     record_id: int,
     id_column: str = "id",
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Delete data from a specific table by ID"""
     tables = crud.get_table_names(db)

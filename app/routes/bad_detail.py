@@ -6,7 +6,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, List
 from app import crud
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 from app.dependencies import templates, render_template
 
 # Router for HTML pages
@@ -88,7 +87,7 @@ async def bad_detail_query_page(
     source_id: Optional[str] = None,
     search_term: Optional[str] = None,
     page: int = 1,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Display the bad detail query page with optional filtering by rule_id and source_id.
@@ -150,7 +149,7 @@ async def search_options(
     request: Request,
     field: str,
     search_term: Optional[str] = None,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Search for rule_id or source_id options based on search term.

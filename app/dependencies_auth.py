@@ -9,7 +9,6 @@ from jose import JWTError, jwt
 from app import auth
 from app import crud
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 
 # Constants - should match those in auth.py
 SECRET_KEY = auth.SECRET_KEY
@@ -18,7 +17,7 @@ ALGORITHM = auth.ALGORITHM
 def get_current_user_from_cookie(
     request: Request,
     access_token: Optional[str] = Cookie(None),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Get the current user from the cookie.

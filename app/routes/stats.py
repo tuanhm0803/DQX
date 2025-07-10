@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse
 from app.database import get_db
 from app import crud
 from app.dependencies import templates, render_template
-from psycopg2.extensions import connection as PgConnection
 from datetime import datetime, timedelta
 
 # API router
@@ -13,13 +12,13 @@ router = APIRouter()
 page_router = APIRouter(tags=["Pages"])
 
 @router.get("/")
-def get_stats(db: PgConnection = Depends(get_db)):
+def get_stats(db = Depends(get_db)):
     script_count = crud.get_script_count(db)
     bad_detail_count = crud.get_bad_detail_count(db)
     return {"script_count": script_count, "bad_detail_count": bad_detail_count}
 
 @page_router.get("/visualization", response_class=HTMLResponse)
-async def visualization_page(request: Request, rule_id: str = None, source_id: str = None, show_all: bool = False, db: PgConnection = Depends(get_db)):
+async def visualization_page(request: Request, rule_id: str = None, source_id: str = None, show_all: bool = False, db = Depends(get_db)):
     """
     Display the data visualization page with charts showing bad details over time.
     

@@ -5,7 +5,6 @@ from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from typing import Optional
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 from app.dependencies import render_template
 from app.user_crud import get_users, create_user, update_user, delete_user, get_user
 from app.role_permissions import can_manage_users
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 def user_management_page(
     request: Request,
     user = Depends(can_manage_users),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Render the user management page for admins"""
     users = get_users(db)
@@ -34,7 +33,7 @@ def create_user_admin(
     full_name: Optional[str] = Form(None),
     role: str = Form("inputter"),
     user = Depends(can_manage_users),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Create a new user as admin"""
     try:
@@ -79,7 +78,7 @@ def update_user_admin(
     is_active: bool = Form(False),
     password: Optional[str] = Form(None),
     user = Depends(can_manage_users),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Update an existing user"""
     try:
@@ -126,7 +125,7 @@ def delete_user_admin(
     request: Request,
     user_id: int,
     user = Depends(can_manage_users),
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """Delete an existing user"""
     try:

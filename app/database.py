@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-import psycopg2
+from app.database_manager import db_manager
 
 # Determine the project root directory
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -12,19 +12,31 @@ if os.path.exists(DOTENV_PATH):
 else:
     print(f"Warning: .env file not found at {DOTENV_PATH}")
 
-# Database connection
+# Database connection using unified manager
+# For backward compatibility, still support DATABASE_URL if set
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    # Fallback or default if still not found, though this should ideally be caught by the check above
-    print("Error: DATABASE_URL environment variable is not set even after attempting to load .env")
-    raise ValueError("DATABASE_URL environment variable is not set")
 
 # Dependency to get DB connection
 def get_db():
-    conn = None  # Initialize conn to None
+    conn = None
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        if DATABASE_URL:
+            # Use legacy DATABASE_URL if provided
+            if db_manager.db_type == "postgresql":
+                import psycopg2
+                conn = psycopg2.connect(DATABASE_URL)
+            else:
+                # For Oracle, fall back to environment variables
+                conn = db_manager.get_connection()
+        else:
+            # Use the unified database manager
+            conn = db_manager.get_connection()
         yield conn
+    except Exception as e:
+        print(f"Database connection error in get_db: {e}")
+        if conn:
+            conn.close()
+        raise
     finally:
         if conn:
             conn.close()

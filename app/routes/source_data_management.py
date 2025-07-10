@@ -6,7 +6,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from typing import Optional, List, Dict, Any
 from app import crud
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 from psycopg2 import sql, Error as PsycopgError
 from app.dependencies import templates, render_template
 from app.role_permissions import can_create_table, can_insert_data
@@ -17,7 +16,7 @@ router = APIRouter(tags=["Pages"])
 @router.get("/source_data_management", response_class=HTMLResponse)
 async def source_data_management_page(
     request: Request, 
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Display the source data management page where users can create, manage,
@@ -55,7 +54,7 @@ async def source_data_management_page(
 async def create_table(
     request: Request,
     user = Depends(can_create_table),
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
     table_name: str = Form(...),
     sql_script: str = Form(...)
 ):
@@ -103,7 +102,7 @@ async def create_table(
 async def insert_data(
     request: Request,
     user = Depends(can_insert_data),
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
     table_name: str = Form(...),
     insert_script: str = Form(...)
 ):
@@ -168,7 +167,7 @@ async def insert_data(
 @router.post("/source_data_management/truncate_table")
 async def truncate_table(
     request: Request,
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
     table_name: str = Form(...)
 ):
     """
@@ -209,7 +208,7 @@ async def truncate_table(
 @router.post("/source_data_management/drop_table")
 async def drop_table(
     request: Request,
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
     table_name: str = Form(...)
 ):
     """
@@ -251,7 +250,7 @@ async def drop_table(
 async def view_table_data(
     request: Request,
     table_name: str,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     View data from a table in the stg schema.

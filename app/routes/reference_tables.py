@@ -4,7 +4,6 @@ Routes for reference tables functionality (rule_ref and source_ref tables)
 from fastapi import APIRouter, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, Dict, Any
-from psycopg2.extensions import connection as PgConnection
 
 from app.database import get_db
 from ..dependencies import templates, render_template
@@ -27,7 +26,7 @@ router = APIRouter(
 @router.get("/", response_class=HTMLResponse)
 def view_references(
     request: Request,
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
 ):
     """View and manage reference tables (rule_ref and source_ref)"""
     
@@ -72,7 +71,7 @@ def add_rule(
     rule_id: str = Form(...),
     rule_name: str = Form(...),
     rule_desc: str = Form(...),
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Add a new rule to the rule_ref table"""
     try:
@@ -122,7 +121,7 @@ def add_source(
     source_id: str = Form(...),
     source_name: str = Form(...),
     source_desc: str = Form(...),
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Add a new source to the source_ref table"""
     try:
@@ -170,7 +169,7 @@ def add_source(
 def delete_rule(
     request: Request,
     rule_id: str,
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Delete a rule from the rule_ref table"""
     try:
@@ -211,7 +210,7 @@ def delete_rule(
 def delete_source(
     request: Request,
     source_id: str,
-    db: PgConnection = Depends(get_db),
+    db = Depends(get_db),
 ):
     """Delete a source from the source_ref table"""
     try:

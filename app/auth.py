@@ -5,7 +5,6 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from psycopg2.extensions import connection as PgConnection
 
 from app import crud
 from app.database import get_db
@@ -32,7 +31,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 # Authentication
-def authenticate_user(db: PgConnection, username: str, password: str):
+def authenticate_user(db, username: str, password: str):
     """Authenticate a user by username and password."""
     user = crud.get_user_by_username(db, username)
     if not user:
@@ -50,7 +49,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: PgConnection = Depends(get_db)):
+def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
     """Get the current authenticated user from a JWT token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

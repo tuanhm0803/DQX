@@ -7,7 +7,6 @@ from starlette.middleware.sessions import SessionMiddleware
 import os
 from app import crud
 from app.database import get_db
-from psycopg2.extensions import connection as PgConnection
 from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin, debug
 from .dependencies import templates, render_template
 from .dependencies_auth import login_required, get_current_user_from_cookie
@@ -16,9 +15,9 @@ from .dependencies_auth import login_required, get_current_user_from_cookie
 class UserMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Store user in request state if available
-        conn = None
+        request.state.user = None  # Initialize user as None
+        
         try:
-            conn = next(get_db())
             # Extract token from cookies if available
             cookies = request.cookies
             access_token = cookies.get("access_token")
@@ -40,20 +39,31 @@ class UserMiddleware(BaseHTTPMiddleware):
                     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
                     username = payload.get("sub")
                     if username:
-                        user = crud.get_user_by_username(conn, username)
-                        request.state.user = user
+                        # Get database connection safely
+                        conn = None
+                        try:
+                            conn = next(get_db())
+                            user = crud.get_user_by_username(conn, username)
+                            request.state.user = user
+                        except Exception as db_error:
+                            # Log database error but don't break the request
+                            print(f"Database error in UserMiddleware: {db_error}")
+                            request.state.user = None
+                        finally:
+                            if conn:
+                                try:
+                                    conn.close()
+                                except Exception:
+                                    pass  # Ignore close errors
                 except JWTError:
                     request.state.user = None
-            else:
-                request.state.user = None
-                
+                    
         except Exception as e:
-            print(f"Error in user middleware: {e}")
+            # Log any other errors but continue processing
+            print(f"Error in UserMiddleware: {e}")
             request.state.user = None
-        finally:
-            if conn:
-                conn.close()
                 
+        # Always continue to the next handler
         response = await call_next(request)
         return response
 
@@ -165,7 +175,7 @@ async def auth_middleware(request: Request, call_next):
 @app.get("/", response_class=HTMLResponse)
 async def read_root(
     request: Request,
-    db: PgConnection = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Main page - accessible without authentication.
