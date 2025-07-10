@@ -21,7 +21,8 @@ def create_schedule_form(
     schedule_type: str = Form(...),
     day_of_week: str = Form(None),
     execution_time: str = Form(...),
-    is_active: str = Form(None)
+    is_active: str = Form(None),
+    auto_publish: str = Form(None)
 ):
     time_parts = execution_time.split(':')
     minute, hour = time_parts[1], time_parts[0]
@@ -31,14 +32,16 @@ def create_schedule_form(
     elif schedule_type == 'monthly':
         cron_schedule = f"{minute} {hour} L * *"
         
-    # Convert is_active string to boolean - checkbox is only present in form data when checked
+    # Convert is_active and auto_publish strings to boolean - checkboxes are only present in form data when checked
     is_active_bool = is_active is not None
+    auto_publish_bool = auto_publish is not None
 
     schedule_data = schemas.ScheduleCreate(
         job_name=job_name,
         script_id=script_id,
         cron_schedule=cron_schedule,
-        is_active=is_active_bool
+        is_active=is_active_bool,
+        auto_publish=auto_publish_bool
     )
     try:
         crud.create_schedule(db, schedule_data.model_dump())
@@ -65,7 +68,8 @@ def update_schedule_form(
     schedule_type: str = Form(...),
     day_of_week: str = Form(None),
     execution_time: str = Form(...),
-    is_active: str = Form(None)
+    is_active: str = Form(None),
+    auto_publish: str = Form(None)
 ):
     # Parse the time
     time_parts = execution_time.split(':')
@@ -78,15 +82,17 @@ def update_schedule_form(
     elif schedule_type == 'monthly':
         cron_schedule = f"{minute} {hour} L * *"
 
-    # Convert is_active string to boolean - checkbox is only present in form data when checked
+    # Convert is_active and auto_publish strings to boolean - checkboxes are only present in form data when checked
     is_active_bool = is_active is not None
+    auto_publish_bool = auto_publish is not None
 
     # Create the schedule update data
     schedule_data = schemas.ScheduleUpdate(
         job_name=job_name,
         script_id=script_id,
         cron_schedule=cron_schedule,
-        is_active=is_active_bool
+        is_active=is_active_bool,
+        auto_publish=auto_publish_bool
     )
     
     try:

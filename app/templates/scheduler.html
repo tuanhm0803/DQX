@@ -70,6 +70,12 @@
                                   {% if not schedule or schedule.is_active %}checked{% endif %}>
                             <label class="form-check-label" for="is-active">Is Active</label>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="auto-publish" name="auto_publish" value="true" 
+                                  {% if schedule and schedule.auto_publish %}checked{% endif %}>
+                            <label class="form-check-label" for="auto-publish">Auto Publish Results</label>
+                            <div class="form-text">Automatically publish script results to the central bad_detail table after execution</div>
+                        </div>
                         <button type="submit" class="btn btn-primary">Save Schedule</button>
                         {% if schedule %}
                         <a href="/schedules/" class="btn btn-secondary">Cancel</a>
@@ -88,6 +94,7 @@
                                 <th>Script Name</th>
                                 <th>Cron Schedule</th>
                                 <th>Active</th>
+                                <th>Auto Publish</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -98,6 +105,7 @@
                                 <td>{{ schedule.script_name }}</td>
                                 <td>{{ schedule.cron_schedule }}</td>
                                 <td>{{ 'Yes' if schedule.is_active else 'No' }}</td>
+                                <td>{{ 'Yes' if schedule.auto_publish else 'No' }}</td>
                                 <td>
                                     <a href="/schedules/edit/{{ schedule.id }}" class="btn btn-sm btn-primary">Edit</a>
                                     <a href="/schedules/delete/{{ schedule.id }}" class="btn btn-sm btn-danger">Delete</a>
@@ -109,9 +117,9 @@
                 </div>
             </div>
         </div>
-{{ endblock }}
+{% endblock %}
 
-{{ block scripts }}
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {

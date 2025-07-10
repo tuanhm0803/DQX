@@ -1,11 +1,12 @@
 """
-Routes for source data management functionality
+Routes for source data management functionality with multi-database support
 """
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from typing import Optional, List, Dict, Any
 from app import crud
 from app.database import get_db
+from app.multi_db_manager import db_manager, get_db_connection
 from psycopg2 import sql, Error as PsycopgError
 from app.dependencies import templates, render_template
 from app.role_permissions import can_create_table, can_insert_data
@@ -19,53 +20,90 @@ async def source_data_management_page(
     db = Depends(get_db)
 ):
     """
-    Display the source data management page where users can create, manage,
-    and interact with tables in the stg schema.
+    Display the source data management page where users can create tables in the target database
+    and query data from source databases.
     
     Args:
         request: The FastAPI request object
-        db: Database connection
+        db: Database connection (for authentication/session)
         
     Returns:
         HTML response with the source data management page
     """
-    # Get all tables in the stg schema
-    stg_tables = []
-    try:
-        # Query to get all tables in the stg schema
-        query = """
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'stg'
-            ORDER BY table_name
-        """
-        result = crud.execute_query(query, db)
-        if result and result.get('data'):
-            stg_tables = [row.get('table_name') for row in result['data']]
-    except Exception as e:
-        print(f"Error fetching stg tables: {str(e)}")
+    # Get target database connection info
+    target_connection = db_manager.get_target_connection_info()
+    
+    # Get all source database connections
+    source_connections = db_manager.get_source_connections()
+    
+    # Get all available database connections for data querying
+    all_connections = db_manager.get_all_connections()
+    
+    # Get target database info with schemas and tables
+    target_data = None
+    if target_connection:
+        try:
+            target_id = target_connection['id']
+            schemas = db_manager.get_schemas(target_id)
+            stg_tables = db_manager.get_tables(target_id, 'stg') if 'stg' in schemas else []
+            
+            target_data = {
+                'connection': target_connection,
+                'schemas': schemas,
+                'stg_tables': stg_tables,
+                'has_stg_schema': 'stg' in schemas
+            }
+        except Exception as e:
+            print(f"Error fetching target database data: {str(e)}")
+            target_data = {
+                'connection': target_connection,
+                'schemas': [],
+                'stg_tables': [],
+                'has_stg_schema': False,
+                'error': str(e)
+            }
+    
+    # Get source database info
+    source_data = []
+    for conn in source_connections:
+        try:
+            schemas = db_manager.get_schemas(conn['id'])
+            source_data.append({
+                'connection': conn,
+                'schemas': schemas,
+                'error': None
+            })
+        except Exception as e:
+            print(f"Error fetching data for source connection {conn['id']}: {str(e)}")
+            source_data.append({
+                'connection': conn,
+                'schemas': [],
+                'error': str(e)
+            })
     
     return render_template("source_data_management.html", {
         "request": request,
-        "stg_tables": stg_tables,
+        "target_data": target_data,
+        "source_data": source_data,
+        "all_connections": all_connections,
     })
 
 @router.post("/source_data_management/create_table")
 async def create_table(
     request: Request,
     user = Depends(can_create_table),
-    db = Depends(get_db),
     table_name: str = Form(...),
-    sql_script: str = Form(...)
+    sql_script: str = Form(...),
+    source_connections: str = Form(None)  # JSON string of selected source connections
 ):
     """
-    Create a new table in the stg schema using a SQL script.
+    Create a new table in the target database's stg schema using data from source databases.
     
     Args:
         request: The FastAPI request object
-        db: Database connection
         table_name: Name of the table to create
-        sql_script: SQL script to create the table
+        sql_script: SQL script to create the table (can reference source databases)
+        source_connections: JSON string of source connections to make available
         
     Returns:
         JSON response with success/error message
@@ -78,24 +116,48 @@ async def create_table(
                 content={"success": False, "message": "Invalid table name. Use only letters, numbers, and underscores."}
             )
         
-        # Create the table
-        # We'll use CREATE TABLE IF NOT EXISTS to avoid errors if table already exists
-        create_query = f"CREATE TABLE IF NOT EXISTS stg.{table_name} AS {sql_script}"
+        # Get the target database connection
+        target_conn = db_manager.get_target_connection()
+        if not target_conn:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "message": "Target database connection not available"}
+            )
         
-        # Execute the query
-        cursor = db.cursor()
-        cursor.execute(create_query)
-        db.commit()
-        cursor.close()
-        
-        return JSONResponse(
-            content={"success": True, "message": f"Table stg.{table_name} created successfully."}
-        )
+        try:
+            cursor = target_conn.cursor()
+            
+            # Ensure the stg schema exists
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS stg")
+            
+            # Create the table in the target database
+            # The SQL script should be a SELECT statement that can reference source databases
+            create_query = f"CREATE TABLE IF NOT EXISTS stg.{table_name} AS {sql_script}"
+            cursor.execute(create_query)
+            
+            target_conn.commit()
+            cursor.close()
+            target_conn.close()
+            
+            target_info = db_manager.get_target_connection_info()
+            target_name = target_info['name'] if target_info else 'target database'
+            
+            return JSONResponse(
+                content={"success": True, "message": f"Table stg.{table_name} created successfully in {target_name}."}
+            )
+            
+        except Exception as e:
+            target_conn.rollback()
+            target_conn.close()
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "message": f"Error creating table: {str(e)}"}
+            )
+            
     except Exception as e:
-        db.rollback()
         return JSONResponse(
             status_code=500,
-            content={"success": False, "message": f"Error creating table: {str(e)}"}
+            content={"success": False, "message": f"Error: {str(e)}"}
         )
 
 @router.post("/source_data_management/insert_data")
@@ -299,4 +361,55 @@ async def view_table_data(
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": f"Error retrieving table data: {str(e)}"}
+        )
+
+# API endpoints for multi-database management
+
+@router.get("/api/database_connections")
+async def get_database_connections(request: Request):
+    """Get all available database connections"""
+    try:
+        connections = db_manager.get_all_connections()
+        return JSONResponse(content={"success": True, "connections": connections})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error fetching connections: {str(e)}"}
+        )
+
+@router.get("/api/database_connections/{connection_id}/schemas")
+async def get_connection_schemas(connection_id: str, request: Request):
+    """Get all schemas for a specific database connection"""
+    try:
+        schemas = db_manager.get_schemas(connection_id)
+        return JSONResponse(content={"success": True, "schemas": schemas})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error fetching schemas: {str(e)}"}
+        )
+
+@router.get("/api/database_connections/{connection_id}/schemas/{schema_name}/tables")
+async def get_schema_tables(connection_id: str, schema_name: str, request: Request):
+    """Get all tables for a specific schema in a database connection"""
+    try:
+        tables = db_manager.get_tables(connection_id, schema_name)
+        return JSONResponse(content={"success": True, "tables": tables})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error fetching tables: {str(e)}"}
+        )
+
+@router.post("/api/database_connections/{connection_id}/test")
+async def test_database_connection(connection_id: str, request: Request):
+    """Test a specific database connection"""
+    try:
+        result = db_manager.test_connection(connection_id)
+        status_code = 200 if result["success"] else 400
+        return JSONResponse(content=result, status_code=status_code)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error testing connection: {str(e)}"}
         )

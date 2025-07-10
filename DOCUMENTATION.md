@@ -2,7 +2,67 @@
 
 ## Overview
 
-DQX is a FastAPI application designed to provide a web-based interface for interacting with a PostgreSQL database using `psycopg2`. It allows users to browse tables, view table structures, query data, and manage SQL scripts. The application has been refactored from an initial SQLAlchemy-based approach to use `psycopg2` for all direct database interactions, enhancing control over SQL execution and simplifying the database layer.
+DQX is a FastAPI application designed to provide a web-based interface for interacting with multiple PostgreSQL databases using `psycopg2`. It implements a **target/source database architecture** where users can create tables in a single target database (localhost:5432) while querying data from multiple source databases. The application has been refactored from an initial Oracle/SQLAlchemy-based approach to use pure PostgreSQL with `psycopg2` for all direct ### 9. `app/routes/source_data_management.py`
+
+*   **Purpose**: Provides a multi-database interface for creating and managing tables in the target database using data from source databases.
+*   **Key Components**:
+    *   `app/routes/source_data_management.py`: Contains endpoints for multi-database table operations.
+    *   `app/templates/source_data_management.html`: Frontend interface with target/source database distinction.
+*   **Architecture**:
+    *   **Target Database**: Single database (localhost:5432) where all tables are created in the `stg` schema
+    *   **Source Databases**: Multiple databases that can be queried for data but where no tables are created
+    *   **Cross-Database Queries**: SQL scripts can reference data from multiple source databases
+*   **Key Features**:
+    *   **Target Database Management**: 
+        - View target database connection status
+        - Automatic `stg` schema creation if it doesn't exist
+        - All table creation operations happen only in target database
+    *   **Source Database Discovery**:
+        - Display all configured source databases
+        - Test connectivity to source databases
+        - Browse schemas and tables in source databases
+    *   **Multi-Database Table Creation**:
+        - Create tables in target database using data from source databases
+        - SQL editor with syntax highlighting using CodeMirror
+        - Cross-database query examples and guidance
+    *   **Table Management** (Target Database Only):
+        - Insert data into existing stg tables
+        - Truncate tables to quickly remove all data
+        - Drop tables to completely remove them
+        - View table data with a modal display
+    *   **Security Features**:
+        - Table name validation for security
+        - Target database enforcement (no table creation in source databases)
+        - Connection testing and error handling
+*   **Key Endpoints**:
+    *   `GET /source_data_management`: Main interface showing target and source databases
+    *   `POST /source_data_management/create_table`: Create table in target database only
+    *   `POST /source_data_management/insert_data`: Insert data into target database table
+    *   `POST /source_data_management/truncate_table`: Truncate target database table
+    *   `POST /source_data_management/drop_table`: Drop target database table
+    *   `GET /api/database_connections`: List all configured database connections
+    *   `POST /api/database_connections/{conn_id}/test`: Test specific database connectionactions, enhancing control over SQL execution and simplifying the database layer.
+
+## Multi-Database Architecture
+
+### Target Database
+- **Location**: localhost:5432 (your working database)
+- **Purpose**: Where all new tables are created in the `stg` schema
+- **Operations**: Full CRUD operations (CREATE, READ, UPDATE, DELETE)
+- **Access**: Primary database for all table management operations
+
+### Source Databases
+- **Location**: Remote PostgreSQL servers (configured in .env)
+- **Purpose**: External databases containing source data
+- **Operations**: READ-ONLY queries for data extraction
+- **Access**: Query permissions only for pulling data
+
+### Multi-Database Workflow
+1. **Configuration**: Define target and source databases in `.env` file
+2. **Connection Management**: Multi-database manager handles all connections
+3. **Data Extraction**: Query source databases to identify available data
+4. **Table Creation**: Create tables in target database using data from source databases
+5. **Data Management**: Manage tables (insert, truncate, drop) in target database only
 
 ## Project Structure
 
@@ -11,10 +71,13 @@ DQX/
 ├── README.md
 ├── DOCUMENTATION.md
 ├── requirements.txt
+├── .env                    # Database connection configuration
+├── .env.example            # Example configuration file
 ├── app/
 │   ├── __init__.py
 │   ├── crud.py             # Core database interaction logic (Create, Read, Update, Delete) using psycopg2
-│   ├── database.py         # Database connection management using psycopg2
+│   ├── database.py         # Primary database connection management using psycopg2
+│   ├── multi_db_manager.py # Multi-database connection manager for target/source databases
 │   ├── main.py             # FastAPI application entry point, middleware, and root routes
 │   ├── models.py           # Data models for the application
 │   ├── schemas.py          # Pydantic models for data validation and serialization
@@ -27,7 +90,7 @@ DQX/
 │   │   ├── query.py        # API routes for executing custom SQL queries
 │   │   ├── reference_tables.py # Routes for managing rule and source references
 │   │   ├── scheduler.py    # Routes for job scheduling
-│   │   ├── source_data_management.py # Routes for managing tables in the stg schema
+│   │   ├── source_data_management.py # Multi-database routes for table management
 │   │   ├── sql_scripts.py  # API routes for managing and executing saved SQL scripts
 │   │   ├── stats.py        # Routes for statistics and visualization
 │   │   └── tables.py       # API routes for table browsing, data manipulation
@@ -41,7 +104,7 @@ DQX/
 │       ├── visualization.html    # Data visualization interface
 │       ├── scheduler.html  # Job scheduler interface
 │       ├── reference_tables.html # Reference tables management
-│       ├── source_data_management.html # Source data management interface
+│       ├── source_data_management.html # Multi-database table management interface
 │       ├── partials/       # Reusable template components
 │       └── sql_editor.html # SQL editor interface
 └── utils/
@@ -212,10 +275,45 @@ DQX/
 
 ## Setup and Running
 
-1.  **Environment Variables**: A `.env` file in the DQX root directory should define `DATABASE_URL` (e.g., `DATABASE_URL="postgresql://user:password@host:port/database"`).
-2.  **Dependencies**: Install dependencies from `requirements.txt` (`pip install -r requirements.txt`).
-3.  **Database Schema**: Before running the application, ensure the required `dq.dq_sql_scripts` table is created in your PostgreSQL database with the correct schema. The `id` column **must** be an auto-incrementing primary key.
+### 1. Environment Configuration
+Create a `.env` file in the DQX root directory with the following structure:
+
+```bash
+# Primary database connection (for authentication and core app operations)
+DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
+
+# Target database - where tables will be created (your working database)
+TARGET_DB_NAME=Working Database
+TARGET_DB_URL=postgresql://postgres:password@localhost:5432/postgres
+TARGET_DB_DESC=Primary working database where tables are created
+
+# Source databases - where data will be queried from
+DB_SOURCE_PROD_NAME=Production Database
+DB_SOURCE_PROD_URL=postgresql://prod_user:prod_password@prod-server:5432/prod_db
+DB_SOURCE_PROD_DESC=Production database (source data)
+
+# Add more source databases as needed following the pattern:
+# DB_SOURCE_<ID>_NAME, DB_SOURCE_<ID>_URL, DB_SOURCE_<ID>_DESC
+
+# JWT Configuration
+SECRET_KEY=your-secret-key-here-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+```
+
+### 2. Dependencies
+Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Database Schema Setup
+Before running the application, ensure the required database schema is created in your **target database**:
     ```sql
+    -- Create the DQ schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS dq;
+    
+    -- Create core tables
     CREATE TABLE dq.dq_sql_scripts (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -225,19 +323,72 @@ DQX/
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    -- It is also assumed that a `dq.bad_detail` table exists with a compatible structure.
     CREATE TABLE dq.bad_detail (
         rule_id VARCHAR(20),
         source_id VARCHAR(20),
         source_uid VARCHAR(500),
         data_value VARCHAR(2000),
         txn_date DATE,
-        -- A composite primary key is recommended to ensure uniqueness
-        -- and improve performance of delete operations.
         PRIMARY KEY (rule_id, source_id, source_uid) 
     );
+    
+    -- Create reference tables
+    CREATE TABLE dq.rule_ref (
+        rule_id VARCHAR(20) PRIMARY KEY,
+        rule_name VARCHAR(200) NOT NULL,
+        rule_description TEXT
+    );
+    
+    CREATE TABLE dq.source_ref (
+        source_id VARCHAR(20) PRIMARY KEY,
+        source_name VARCHAR(200) NOT NULL,
+        source_description TEXT
+    );
+    
+    -- Create user authentication table
+    CREATE TABLE users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        full_name VARCHAR(100),
+        hashed_password VARCHAR(255) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        role VARCHAR(20) NOT NULL DEFAULT 'inputter',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT users_role_check CHECK (role IN ('admin', 'creator', 'inputter'))
+    );
+    
+    -- Create STG schema for table creation
+    CREATE SCHEMA IF NOT EXISTS stg;
     ```
-4.  **Running**: Execute `python app/main.py` from the DQX root directory, or run using Uvicorn directly: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`.
+
+### 4. Source Database Setup
+For each source database you want to connect to:
+1. Ensure the user specified in your `.env` file has READ permissions
+2. Grant necessary schema and table access permissions
+3. Test connectivity using the application's connection test feature
+
+### 5. Running the Application
+Execute from the DQX root directory:
+```bash
+# Using Python directly
+python -m app.main
+
+# Using Uvicorn (recommended for development)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# For production
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 6. Initial Setup
+1. Access the application at `http://localhost:8000`
+2. Register the first admin user
+3. Configure additional database connections in the Source Data Management section
+4. Test all database connections before creating tables
+
+## API Reference
 
 ## Key Design Considerations
 

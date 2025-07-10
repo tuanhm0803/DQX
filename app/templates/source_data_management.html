@@ -16,7 +16,136 @@
 
         <div class="glass-card p-4 mb-4 shadow">
             <h1 class="h2 mb-3 text-center">Source Data Management</h1>
-            <p class="text-center text-muted">Create and manage tables in the stg schema</p>
+            <p class="text-center text-muted">Create tables in your target database using data from source databases</p>
+        </div>
+
+        <!-- Target Database Info -->
+        <div class="glass-card p-4 mb-4 shadow">
+            <h3 class="h4 mb-3">
+                <i class="bi bi-bullseye me-2"></i>Target Database (Where Tables Will Be Created)
+            </h3>
+            {% if target_data %}
+                <div class="card {% if target_data.get('error') %}border-danger{% elif target_data.has_stg_schema %}border-success{% else %}border-warning{% endif %}">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-database me-2"></i>{{ target_data.connection.name }}
+                            {% if target_data.get('error') %}
+                                <span class="badge bg-danger ms-2">Error</span>
+                            {% elif target_data.has_stg_schema %}
+                                <span class="badge bg-success ms-2">Ready</span>
+                            {% else %}
+                                <span class="badge bg-warning ms-2">STG Schema Will Be Created</span>
+                            {% endif %}
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text small text-muted">{{ target_data.connection.description or "No description" }}</p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="small mb-2">
+                                    <strong>Database:</strong> {{ target_data.connection.database }}<br>
+                                    <strong>Host:</strong> {{ target_data.connection.host }}:{{ target_data.connection.port }}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                {% if target_data.get('error') %}
+                                    <div class="alert alert-danger small py-2">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>{{ target_data.error }}
+                                    </div>
+                                {% else %}
+                                    <p class="small">
+                                        <strong>Schemas:</strong> {{ target_data.schemas|length }} available<br>
+                                        <strong>STG Tables:</strong> {{ target_data.stg_tables|length }} tables
+                                    </p>
+                                    {% if target_data.stg_tables %}
+                                        <details class="small">
+                                            <summary class="text-primary">View STG Tables ({{ target_data.stg_tables|length }})</summary>
+                                            <ul class="list-unstyled mt-2 ms-3">
+                                                {% for table in target_data.stg_tables %}
+                                                    <li><i class="bi bi-table me-1"></i>{{ table }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </details>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-sm btn-outline-primary test-connection" data-connection-id="{{ target_data.connection.id }}">
+                            <i class="bi bi-check-circle me-1"></i>Test Connection
+                        </button>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No target database configured. Please check your .env configuration for TARGET_DB_URL.
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Source Databases Info -->
+        <div class="glass-card p-4 mb-4 shadow">
+            <h3 class="h4 mb-3">
+                <i class="bi bi-server me-2"></i>Source Databases (Where Data Will Be Queried From)
+            </h3>
+            {% if source_data %}
+                <div class="row">
+                    {% for source in source_data %}
+                    <div class="col-lg-4 col-md-6 mb-3">
+                        <div class="card h-100 {% if source.get('error') %}border-danger{% else %}border-info{% endif %}">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">
+                                    <i class="bi bi-database me-2"></i>{{ source.connection.name }}
+                                    {% if source.get('error') %}
+                                        <span class="badge bg-danger ms-2">Error</span>
+                                    {% else %}
+                                        <span class="badge bg-info ms-2">Source</span>
+                                    {% endif %}
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text small text-muted">{{ source.connection.description or "No description" }}</p>
+                                <p class="small mb-2">
+                                    <strong>Database:</strong> {{ source.connection.database }}<br>
+                                    <strong>Host:</strong> {{ source.connection.host }}:{{ source.connection.port }}
+                                </p>
+                                {% if source.get('error') %}
+                                    <div class="alert alert-danger small py-2">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>{{ source.error }}
+                                    </div>
+                                {% else %}
+                                    <p class="small">
+                                        <strong>Available Schemas:</strong> {{ source.schemas|length }}
+                                    </p>
+                                    {% if source.schemas %}
+                                        <details class="small">
+                                            <summary class="text-info">View Schemas ({{ source.schemas|length }})</summary>
+                                            <ul class="list-unstyled mt-2 ms-3">
+                                                {% for schema in source.schemas %}
+                                                    <li><i class="bi bi-folder me-1"></i>{{ schema }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </details>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                            <div class="card-footer">
+                                <button class="btn btn-sm btn-outline-info test-connection" data-connection-id="{{ source.connection.id }}">
+                                    <i class="bi bi-check-circle me-1"></i>Test Connection
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    No source databases configured. Add DB_SOURCE_* variables to your .env file to query data from external databases.
+                </div>
+            {% endif %}
         </div>
 
         <!-- Tabs for different operations -->
@@ -46,24 +175,56 @@
             <div class="tab-content p-3 border-start border-end border-bottom" id="operationTabsContent">
                 <!-- Create Table Tab -->
                 <div class="tab-pane fade show active" id="create" role="tabpanel" aria-labelledby="create-tab">
-                    <h3 class="h4 mb-3">Create Table in stg Schema</h3>
-                    <form id="create-table-form">
-                        <div class="mb-3">
-                            <label for="create-table-name" class="form-label">Table Name</label>
-                            <div class="input-group">
-                                <span class="input-group-text">stg.</span>
-                                <input type="text" class="form-control" id="create-table-name" name="table_name" placeholder="table_name" required>
+                    <h3 class="h4 mb-3">Create Table</h3>
+                    
+                    {% if target_data and not target_data.get('error') %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Tables will be created in the <strong>{{ target_data.connection.name }}</strong> database in the <strong>stg</strong> schema.
+                            Your SQL script can reference data from any of the configured source databases.
+                        </div>
+                        
+                        <form id="create-table-form">
+                            <div class="mb-3">
+                                <label for="create-table-name" class="form-label">Table Name</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">stg.</span>
+                                    <input type="text" class="form-control" id="create-table-name" name="table_name" placeholder="table_name" required>
+                                </div>
+                                <div class="form-text">
+                                    Table will be created in the stg schema of {{ target_data.connection.name }}.
+                                    If the stg schema doesn't exist, it will be created automatically.
+                                </div>
                             </div>
+                            
+                            <div class="mb-3">
+                                <label for="create-sql-script" class="form-label">SQL Script</label>
+                                <p class="text-muted small">Use a SELECT statement to define the table structure and initial data. You can reference source databases in your query.</p>
+                                {% if source_data %}
+                                <details class="mb-2">
+                                    <summary class="text-primary small">Available Source Databases</summary>
+                                    <ul class="list-unstyled small mt-2 ms-3">
+                                        {% for source in source_data %}
+                                            {% if not source.get('error') %}
+                                                <li><i class="bi bi-database me-1"></i><strong>{{ source.connection.name }}:</strong> {{ source.connection.database }}</li>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </ul>
+                                    <p class="small text-muted mt-2">Note: Cross-database queries depend on your PostgreSQL configuration and permissions.</p>
+                                </details>
+                                {% endif %}
+                                <textarea class="form-control code-editor" id="create-sql-script" name="sql_script" rows="10" placeholder="SELECT column1, column2 FROM source_table WHERE condition"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle me-2"></i>Create Table in {{ target_data.connection.name }}
+                            </button>
+                        </form>
+                    {% else %}
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            Target database is not available or has configuration issues. Please check your .env configuration and ensure the target database is accessible.
                         </div>
-                        <div class="mb-3">
-                            <label for="create-sql-script" class="form-label">SQL Script</label>
-                            <p class="text-muted small">Use a SELECT statement to define the table structure and initial data.</p>
-                            <textarea class="form-control code-editor" id="create-sql-script" name="sql_script" rows="10" placeholder="SELECT column1, column2 FROM source_table WHERE condition"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-plus-circle me-2"></i>Create Table
-                        </button>
-                    </form>
+                    {% endif %}
                 </div>
                 
                 <!-- Insert Data Tab -->
@@ -76,9 +237,11 @@
                                 <span class="input-group-text">stg.</span>
                                 <select class="form-select" id="insert-table-select" name="table_name" required>
                                     <option value="" selected disabled>-- Select a table --</option>
-                                    {% for table in stg_tables %}
-                                        <option value="{{ table }}">{{ table }}</option>
-                                    {% endfor %}
+                                    {% if target_data and target_data.stg_tables %}
+                                        {% for table in target_data.stg_tables %}
+                                            <option value="{{ table }}">{{ table }}</option>
+                                        {% endfor %}
+                                    {% endif %}
                                 </select>
                             </div>
                         </div>
@@ -105,9 +268,11 @@ VALUES (value1, value2), (value3, value4)"></textarea>
                                 <span class="input-group-text">stg.</span>
                                 <select class="form-select" id="truncate-table-select" name="table_name" required>
                                     <option value="" selected disabled>-- Select a table --</option>
-                                    {% for table in stg_tables %}
-                                        <option value="{{ table }}">{{ table }}</option>
-                                    {% endfor %}
+                                    {% if target_data and target_data.stg_tables %}
+                                        {% for table in target_data.stg_tables %}
+                                            <option value="{{ table }}">{{ table }}</option>
+                                        {% endfor %}
+                                    {% endif %}
                                 </select>
                             </div>
                         </div>
@@ -131,9 +296,11 @@ VALUES (value1, value2), (value3, value4)"></textarea>
                                 <span class="input-group-text">stg.</span>
                                 <select class="form-select" id="drop-table-select" name="table_name" required>
                                     <option value="" selected disabled>-- Select a table --</option>
-                                    {% for table in stg_tables %}
-                                        <option value="{{ table }}">{{ table }}</option>
-                                    {% endfor %}
+                                    {% if target_data and target_data.stg_tables %}
+                                        {% for table in target_data.stg_tables %}
+                                            <option value="{{ table }}">{{ table }}</option>
+                                        {% endfor %}
+                                    {% endif %}
                                 </select>
                             </div>
                         </div>
@@ -253,6 +420,47 @@ VALUES (value1, value2), (value3, value4)"></textarea>
                     statusDiv.classList.add('d-none');
                 }, 5000);
             }
+            
+            // Handle test connection buttons
+            document.querySelectorAll('.test-connection').forEach(button => {
+                button.addEventListener('click', async function(e) {
+                    const connectionId = e.target.getAttribute('data-connection-id');
+                    const originalText = e.target.innerHTML;
+                    
+                    e.target.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Testing...';
+                    e.target.disabled = true;
+                    
+                    try {
+                        const response = await fetch(`/api/database_connections/${connectionId}/test`, {
+                            method: 'POST'
+                        });
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            showStatusMessage(`Connection ${connectionId} test successful!`, 'success');
+                            e.target.innerHTML = '<i class="bi bi-check-circle me-1"></i>Connection OK';
+                            e.target.classList.remove('btn-outline-primary');
+                            e.target.classList.add('btn-outline-success');
+                        } else {
+                            showStatusMessage(`Connection ${connectionId} test failed: ${result.message}`, 'danger');
+                            e.target.innerHTML = '<i class="bi bi-x-circle me-1"></i>Connection Failed';
+                            e.target.classList.remove('btn-outline-primary');
+                            e.target.classList.add('btn-outline-danger');
+                        }
+                    } catch (error) {
+                        showStatusMessage(`Connection test error: ${error.message}`, 'danger');
+                        e.target.innerHTML = '<i class="bi bi-x-circle me-1"></i>Test Error';
+                        e.target.classList.remove('btn-outline-primary');
+                        e.target.classList.add('btn-outline-danger');
+                    } finally {
+                        setTimeout(() => {
+                            e.target.innerHTML = originalText;
+                            e.target.disabled = false;
+                            e.target.className = 'btn btn-sm btn-outline-primary test-connection';
+                        }, 3000);
+                    }
+                });
+            });
             
             // Handle Create Table Form Submit
             document.getElementById('create-table-form').addEventListener('submit', async function(e) {

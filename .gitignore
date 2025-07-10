@@ -174,10 +174,7 @@ chat_log*.txt
 debug*.txt
 test*.txt
 
-# Oracle specific files (for future migration)
-*.ora
-tnsnames.ora
-sqlnet.ora
+
 
 # Development scripts
 dev_*

@@ -4,46 +4,13 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import re
-import os
 
-# Get database type to handle Oracle-specific issues
-DB_TYPE = os.getenv("DB_TYPE", "postgresql")
-
-# --- Helper functions for database-agnostic operations ---
-
-def _get_current_timestamp():
-    """Get current timestamp in a database-agnostic way without timezone info"""
-    # Return naive datetime to avoid Oracle thin mode timezone issues
-    return datetime.now().replace(tzinfo=None)
-
-def _convert_query_for_database(query: str) -> str:
-    """Convert query syntax for the current database type"""
-    if DB_TYPE == "oracle":
-        # Replace NOW() with SYSDATE to avoid timezone issues in Oracle thin mode
-        query = query.replace("NOW()", "SYSDATE")
-        
-        # Convert LIMIT/OFFSET for Oracle
-        import re
-        limit_pattern = r'\s+LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?\s*;?\s*$'
-        match = re.search(limit_pattern, query, re.IGNORECASE)
-        if match:
-            limit = int(match.group(1))
-            offset = int(match.group(2)) if match.group(2) else 0
-            if offset > 0:
-                replacement = f' OFFSET {offset} ROWS FETCH FIRST {limit} ROWS ONLY'
-            else:
-                replacement = f' FETCH FIRST {limit} ROWS ONLY'
-            query = re.sub(limit_pattern, replacement, query, flags=re.IGNORECASE)
-    
-    return query
-
-# --- Helper functions for safe SQL construction (Oracle-compatible) ---
+# --- Helper functions for safe SQL construction ---
 
 def _quote_identifier(name: str) -> str:
     """
     Safely quote a SQL identifier (table name, column name, schema name).
-    This replaces psycopg2's sql.Identifier functionality.
-    Oracle-compatible: uses double quotes for identifiers.
+    Uses double quotes for identifiers.
     """
     # Remove any existing quotes and escape internal quotes
     clean_name = name.replace('"', '""')
@@ -53,7 +20,6 @@ def _build_placeholder_list(count: int) -> str:
     """
     Build a list of parameter placeholders.
     This replaces psycopg2's sql.Placeholder functionality.
-    Oracle-compatible: uses :1, :2, etc. but for PostgreSQL we use %s
     """
     return ', '.join(['%s'] * count)
 
@@ -495,7 +461,7 @@ def create_sql_script(db, script_data: Dict[str, Any]) -> Dict[str, Any]:
         # --- End of new logic ---
 
         # Start transaction
-        current_time = _get_current_timestamp()
+        current_time = datetime.now()
         query = """
             INSERT INTO dq.dq_sql_scripts (name, description, content, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s)
@@ -590,7 +556,7 @@ def update_sql_script(db, script_id: int, script_data: Dict[str, Any]) -> Option
         
         description = script_data.get('description')
         content = script_data['content']
-        current_time = _get_current_timestamp()
+        current_time = datetime.now()
 
         query = """
             UPDATE dq.dq_sql_scripts
@@ -828,15 +794,16 @@ def create_schedule(db, schedule: Dict[str, Any]) -> Dict[str, Any]:
     try:
         cursor = db.cursor()
         query = """
-            INSERT INTO dq.dq_schedules (job_name, script_id, cron_schedule, is_active)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;
+            INSERT INTO dq.dq_schedules (job_name, script_id, cron_schedule, is_active, auto_publish)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, job_name, script_id, cron_schedule, is_active, auto_publish, created_at, updated_at;
         """
         cursor.execute(query, (
             schedule['job_name'],
             schedule['script_id'],
             schedule['cron_schedule'],
-            schedule.get('is_active', True)
+            schedule.get('is_active', True),
+            schedule.get('auto_publish', False)
         ))
         new_schedule_tuple = cursor.fetchone()
         db.commit()
@@ -855,7 +822,7 @@ def get_schedules(db) -> List[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
-        query = "SELECT s.id, s.job_name, s.script_id, sc.name as script_name, s.cron_schedule, s.is_active, s.created_at, s.updated_at FROM dq.dq_schedules s JOIN dq.dq_sql_scripts sc ON s.script_id = sc.id ORDER BY s.id ASC;"
+        query = "SELECT s.id, s.job_name, s.script_id, sc.name as script_name, s.cron_schedule, s.is_active, s.auto_publish, s.created_at, s.updated_at FROM dq.dq_schedules s JOIN dq.dq_sql_scripts sc ON s.script_id = sc.id ORDER BY s.id ASC;"
         cursor.execute(query)
         schedules_tuples = cursor.fetchall()
 
@@ -873,7 +840,7 @@ def get_schedule(db, schedule_id: int) -> Optional[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
-        query = "SELECT id, job_name, script_id, cron_schedule, is_active, created_at, updated_at FROM dq.dq_schedules WHERE id = %s;"
+        query = "SELECT id, job_name, script_id, cron_schedule, is_active, auto_publish, created_at, updated_at FROM dq.dq_schedules WHERE id = %s;"
         cursor.execute(query, (schedule_id,))
         schedule_tuple = cursor.fetchone()
 
@@ -906,7 +873,7 @@ def update_schedule(db, schedule_id: int, schedule_data: Dict[str, Any]) -> Opti
         values.append(schedule_id)
         set_clause = ', '.join(set_parts)
 
-        query = f"UPDATE dq.dq_schedules SET {set_clause} WHERE id = %s RETURNING id, job_name, script_id, cron_schedule, is_active, created_at, updated_at;"
+        query = f"UPDATE dq.dq_schedules SET {set_clause} WHERE id = %s RETURNING id, job_name, script_id, cron_schedule, is_active, auto_publish, created_at, updated_at;"
 
         cursor.execute(query, values)
         updated_schedule_tuple = cursor.fetchone()

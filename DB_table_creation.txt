@@ -17,9 +17,11 @@ CREATE TABLE dq.bad_detail (
 
 CREATE TABLE dq.dq_schedules (
     id SERIAL PRIMARY KEY,
+    job_name VARCHAR(255) NOT NULL,
     script_id INTEGER NOT NULL REFERENCES dq.dq_sql_scripts(id) ON DELETE CASCADE,
-    schedule_type VARCHAR(10) NOT NULL, -- 'daily', 'weekly', 'monthly'
-    execution_time TIME NOT NULL,
+    cron_schedule VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    auto_publish BOOLEAN NOT NULL DEFAULT FALSE, -- Auto publish results after execution
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -41,6 +41,7 @@ class ScheduleBase(BaseModel):
     script_id: int
     cron_schedule: str
     is_active: bool = True
+    auto_publish: bool = False  # Auto publish results after execution
 
 class ScheduleCreate(ScheduleBase):
     pass
@@ -50,6 +51,7 @@ class ScheduleUpdate(BaseModel):
     script_id: Optional[int] = None
     cron_schedule: Optional[str] = None
     is_active: Optional[bool] = None
+    auto_publish: Optional[bool] = None
 
 class Schedule(ScheduleBase):
     id: int

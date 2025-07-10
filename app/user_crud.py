@@ -25,7 +25,7 @@ def create_user(db, username: str, email: str, password: str,
         
     cursor = db.cursor()
     hashed_password = get_password_hash(password)
-    now = datetime.now().replace(tzinfo=None)  # Remove timezone info for Oracle compatibility
+    now = datetime.now()
     
     try:
         cursor.execute(
@@ -189,7 +189,7 @@ def update_user(db, user_id: int, update_data: dict) -> Optional[User]:
         
         # Add updated_at timestamp
         update_fields.append("updated_at = %s")
-        params.append(datetime.now().replace(tzinfo=None))  # Remove timezone info for Oracle compatibility
+        params.append(datetime.now())
         
         # Add user_id for WHERE clause
         params.append(user_id)
@@ -239,7 +239,7 @@ def deactivate_user(db, user_id: int) -> bool:
             SET is_active = false, updated_at = %s
             WHERE id = %s
             """,
-            (datetime.now().replace(tzinfo=None), user_id)  # Remove timezone info for Oracle compatibility
+            (datetime.now(), user_id)
         )
         
         if cursor.rowcount == 0:
