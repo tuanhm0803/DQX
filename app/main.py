@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import os
 from app import crud
 from app.database import get_db
-from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin, debug
+from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin
 from .dependencies import templates, render_template
 from .dependencies_auth import login_required, get_current_user_from_cookie
 
@@ -123,7 +123,6 @@ app.include_router(stats.page_router, tags=["Pages"], dependencies=[Depends(logi
 app.include_router(reference_tables.router, dependencies=[Depends(login_required)])  # Add the reference tables router
 app.include_router(source_data_management.router, dependencies=[Depends(login_required)])  # Add the source data management router
 app.include_router(admin.router, dependencies=[Depends(login_required)])  # Add the admin router
-app.include_router(debug.router, dependencies=[Depends(login_required)])  # Add the debug router
 
 
 # Mount static files directory

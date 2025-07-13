@@ -8,7 +8,7 @@ import psycopg2
 
 router = APIRouter()
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TABLE_NOT_FOUND_ERROR = "Table not found"
@@ -21,7 +21,7 @@ def get_tables(db = Depends(get_db)):
         cursor = db.cursor()
         cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'dq';")
         tables = [row[0] for row in cursor.fetchall()]
-        logger.debug(f"Tables in 'DQ' schema: {tables}")
+        logger.info(f"Tables in 'DQ' schema: {tables}")
         return tables
     except psycopg2.Error as e:
         logger.error(f"Error retrieving tables: {str(e)}")

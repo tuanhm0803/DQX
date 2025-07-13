@@ -231,7 +231,7 @@ DQX/
 
 ### 6. `app/routes/scheduler.py`
 
-*   **Purpose**: Allows scheduling SQL scripts to run at specific intervals.
+*   **Purpose**: Allows scheduling SQL scripts to run at specific intervals with optional auto-publishing.
 *   **Key Components**:
     *   `app/routes/scheduler.py`: Contains endpoints for managing job schedules.
     *   `app/templates/scheduler.html`: Frontend interface for schedule management.
@@ -239,7 +239,14 @@ DQX/
     *   Support for daily, weekly, and monthly schedules
     *   Cron-based scheduling (using standard cron format)
     *   Active/inactive status toggling
+    *   **Auto-Publish Results**: Schedules can automatically publish results to the central `dq.bad_detail` table after execution
     *   Integration with SQL scripts
+*   **Auto-Publish Feature**:
+    *   Added `auto_publish` BOOLEAN column to `dq.dq_schedules` table
+    *   When enabled, script results are automatically moved from staging tables (`stg.dq_script_{id}`) to `dq.bad_detail`
+    *   Eliminates manual publishing step for automated workflows
+    *   Configurable per schedule with checkbox in UI
+    *   Backward compatible (defaults to FALSE for existing schedules)
 
 ### 7. `app/routes/reference_tables.py`
 
@@ -600,6 +607,7 @@ For more examples, see the `utils/logger_examples.py` file.
        script_id INTEGER REFERENCES dq.dq_sql_scripts(id) ON DELETE CASCADE,
        cron_schedule VARCHAR(100) NOT NULL,
        is_active BOOLEAN DEFAULT TRUE,
+       auto_publish BOOLEAN NOT NULL DEFAULT FALSE,
        created_at TIMESTAMPTZ DEFAULT NOW(),
        updated_at TIMESTAMPTZ DEFAULT NOW()
    );
