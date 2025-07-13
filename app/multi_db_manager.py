@@ -60,35 +60,36 @@ class MultiDatabaseManager:
             self.add_connection_from_url("target", target_name, target_url, target_desc)
         
         # Load source database connections (where data will be queried from)
-        # Format: DB_SOURCE_<ID>_NAME, DB_SOURCE_<ID>_URL, etc.
+        # Support both DB_SOURCE_<ID>_* and DB_CONN_<ID>_* formats for backward compatibility
         source_ids = set()
+        
+        # Check for DB_SOURCE_ format
         for key in os.environ.keys():
             if key.startswith("DB_SOURCE_") and key.endswith("_URL"):
                 source_id = key.replace("DB_SOURCE_", "").replace("_URL", "").lower()
-                source_ids.add(source_id)
+                source_ids.add(("source", source_id))
         
-        for source_id in source_ids:
-            name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME", f"Source {source_id}")
-            url = os.getenv(f"DB_SOURCE_{source_id.upper()}_URL")
-            description = os.getenv(f"DB_SOURCE_{source_id.upper()}_DESC", "Source database")
-            
-            if url:
-                self.add_connection_from_url(f"source_{source_id}", name, url, description)
-        
-        # Legacy support for DB_CONN_ format (treat as sources)
-        conn_ids = set()
+        # Check for legacy DB_CONN_ format  
         for key in os.environ.keys():
             if key.startswith("DB_CONN_") and key.endswith("_URL"):
                 conn_id = key.replace("DB_CONN_", "").replace("_URL", "").lower()
-                conn_ids.add(conn_id)
+                source_ids.add(("conn", conn_id))
         
-        for conn_id in conn_ids:
-            name = os.getenv(f"DB_CONN_{conn_id.upper()}_NAME", f"Database {conn_id}")
-            url = os.getenv(f"DB_CONN_{conn_id.upper()}_URL")
-            description = os.getenv(f"DB_CONN_{conn_id.upper()}_DESC", "")
+        # Process all source connections
+        for format_type, source_id in source_ids:
+            if format_type == "source":
+                name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME", f"Source {source_id}")
+                url = os.getenv(f"DB_SOURCE_{source_id.upper()}_URL")
+                description = os.getenv(f"DB_SOURCE_{source_id.upper()}_DESC", "Source database")
+                connection_id = f"source_{source_id}"
+            else:  # format_type == "conn"
+                name = os.getenv(f"DB_CONN_{source_id.upper()}_NAME", f"Database {source_id}")
+                url = os.getenv(f"DB_CONN_{source_id.upper()}_URL")
+                description = os.getenv(f"DB_CONN_{source_id.upper()}_DESC", "Legacy connection")
+                connection_id = source_id
             
             if url:
-                self.add_connection_from_url(conn_id, name, url, description)
+                self.add_connection_from_url(connection_id, name, url, description)
     
     def add_connection_from_url(self, conn_id: str, name: str, url: str, description: str = ""):
         """Add a database connection from a PostgreSQL URL"""
