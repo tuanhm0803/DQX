@@ -2,7 +2,9 @@
 
 ## Overview
 
-DQX is a FastAPI application designed to provide a web-based interface for interacting with multiple PostgreSQL databases using `psycopg2`. It implements a **target/source database architecture** where users can create tables in a single target database (localhost:5432) while querying data from multiple source databases. The application has been refactored from an initial Oracle/SQLAlchemy-based approach to use pure PostgreSQL with `psycopg2` for all direct ### 9. `app/routes/source_data_management.py`
+DQX is a FastAPI application designed to provide a web-based interface for interacting with multiple PostgreSQL databases using `psycopg2`. It implements a **target/source database architecture** where users can create tables in a single target database (localhost:5432) while querying data from multiple source databases. The application has been built from the ground up to use pure PostgreSQL with `psycopg2` for all direct database interactions, enhancing control over SQL execution and simplifying the database layer.
+
+## Multi-Database Architecture
 
 *   **Purpose**: Provides a multi-database interface for creating and managing tables in the target database using data from source databases.
 *   **Key Components**:
