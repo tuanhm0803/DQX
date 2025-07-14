@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
-from typing import List
+from typing import List, Optional
 from app import crud, schemas
 from app.database import get_db
 from app.dependencies import templates, render_template
+from app.dependencies_auth import get_current_user_from_cookie
+from app.role_permissions import can_delete_schedules
 
 router = APIRouter()
 
@@ -104,7 +106,7 @@ def update_schedule_form(
     return RedirectResponse(url="/schedules/", status_code=303)
 
 @router.get("/schedules/delete/{schedule_id}")
-def delete_schedule_form(schedule_id: int, db = Depends(get_db)):
+def delete_schedule_form(schedule_id: int, db = Depends(get_db), user = Depends(can_delete_schedules)):
     result = crud.delete_schedule(db, schedule_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -142,9 +144,38 @@ def api_update_schedule(schedule_id: int, schedule: schemas.ScheduleUpdate, db =
     return db_schedule
 
 @router.delete("/api/schedules/{schedule_id}")
-def api_delete_schedule(schedule_id: int, db = Depends(get_db)):
+def api_delete_schedule(schedule_id: int, db = Depends(get_db), user = Depends(can_delete_schedules)):
     """Delete a schedule."""
     result = crud.delete_schedule(db, schedule_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
+
+@router.get("/api/schedule-run-logs")
+async def get_schedule_run_logs_api(
+    current_user=Depends(get_current_user_from_cookie),
+    db=Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+    schedule_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None)
+):
+    """API endpoint to get schedule run logs."""
+    try:
+        logs = crud.get_schedule_run_logs(
+            db=db,
+            limit=limit,
+            offset=0,
+            schedule_id=schedule_id,
+            status=status
+        )
+        
+        return {
+            "success": True,
+            "data": logs
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }

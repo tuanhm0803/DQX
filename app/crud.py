@@ -450,9 +450,11 @@ def get_sql_script(db, script_id: int) -> Optional[Dict[str, Any]]:
             cursor.close()
 
 
-def create_sql_script(db, script_data: Dict[str, Any]) -> Dict[str, Any]:
+def create_sql_script(db, script_data: Dict[str, Any], user=None) -> Dict[str, Any]:
     """Create a new SQL script and its corresponding staging table."""
-    _validate_sql_script_columns(script_data['content'])
+    # Only validate columns for non-admin users
+    if not user or user.role != "admin":
+        _validate_sql_script_columns(script_data['content'])
     
     cursor = None
     try:
@@ -542,7 +544,7 @@ def _create_staging_table(cursor, script_id: int, script_content: str):
     cursor.execute(create_table_query)
 
 
-def update_sql_script(db, script_id: int, script_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def update_sql_script(db, script_id: int, script_data: Dict[str, Any], user=None) -> Optional[Dict[str, Any]]:
     """Update an existing SQL script after validating its new content."""
     _validate_sql_script_columns(script_data['content'])
 
@@ -887,3 +889,278 @@ def delete_schedule(db, schedule_id: int) -> Dict[str, Any]:
     finally:
         if cursor:
             cursor.close()
+
+
+# ========================================================================================
+# USER ACTIONS LOG OPERATIONS
+# ========================================================================================
+
+def log_user_action(db, user_id: int, username: str, action: str, 
+                   resource_type: Optional[str] = None, resource_id: Optional[int] = None, 
+                   details: Optional[dict] = None, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
+    """Log a user action for audit purposes."""
+    try:
+        cursor = db.cursor()
+        
+        insert_query = """
+            INSERT INTO dq.user_actions_log 
+            (user_id, username, action, resource_type, resource_id, details, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, created_at;
+        """
+        
+        details_json = json.dumps(details) if details else None
+        
+        cursor.execute(insert_query, (
+            user_id, username, action, resource_type, resource_id,
+            details_json, ip_address, user_agent
+        ))
+        
+        result = cursor.fetchone()
+        db.commit()
+        
+        return {
+            "success": True,
+            "log_id": result[0],
+            "created_at": result[1]
+        }
+        
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+
+def get_user_actions_log(db, limit: int = 100, offset: int = 0, 
+                        user_id: Optional[int] = None, action: Optional[str] = None,
+                        filters: Optional[dict] = None,
+                        get_unique_usernames: bool = False,
+                        get_unique_actions: bool = False,
+                        get_unique_resource_types: bool = False) -> Dict[str, Any]:
+    """Get user actions log with optional filtering and unique values for dropdowns."""
+    try:
+        cursor = db.cursor()
+        
+        # Handle unique value requests
+        if get_unique_usernames:
+            cursor.execute("SELECT DISTINCT username FROM dq.user_actions_log ORDER BY username")
+            return {"usernames": [row[0] for row in cursor.fetchall()]}
+            
+        if get_unique_actions:
+            cursor.execute("SELECT DISTINCT action FROM dq.user_actions_log ORDER BY action")
+            return {"actions": [row[0] for row in cursor.fetchall()]}
+            
+        if get_unique_resource_types:
+            cursor.execute("SELECT DISTINCT resource_type FROM dq.user_actions_log WHERE resource_type IS NOT NULL ORDER BY resource_type")
+            return {"resource_types": [row[0] for row in cursor.fetchall()]}
+        
+        # Build query for logs
+        base_query = """
+            SELECT id, user_id, username, action, resource_type, resource_id, 
+                   details, ip_address, user_agent, created_at
+            FROM dq.user_actions_log
+        """
+        
+        count_query = "SELECT COUNT(*) FROM dq.user_actions_log"
+        
+        conditions = []
+        params = []
+        
+        # Legacy filters
+        if user_id:
+            conditions.append("user_id = %s")
+            params.append(user_id)
+            
+        if action:
+            conditions.append("action = %s")
+            params.append(action)
+        
+        # New filters from dict
+        if filters:
+            if filters.get('username'):
+                conditions.append("username ILIKE %s")
+                params.append(f"%{filters['username']}%")
+                
+            if filters.get('action'):
+                conditions.append("action = %s")
+                params.append(filters['action'])
+                
+            if filters.get('resource_type'):
+                conditions.append("resource_type = %s")
+                params.append(filters['resource_type'])
+                
+            if filters.get('date_from'):
+                conditions.append("created_at >= %s")
+                params.append(filters['date_from'])
+                
+            if filters.get('date_to'):
+                conditions.append("created_at <= %s")
+                params.append(filters['date_to'] + ' 23:59:59')
+            
+        where_clause = ""
+        if conditions:
+            where_clause = " WHERE " + " AND ".join(conditions)
+            
+        # Get total count
+        cursor.execute(count_query + where_clause, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Get logs
+        base_query += where_clause + " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        cursor.execute(base_query, params)
+        results = cursor.fetchall()
+        
+        logs = [
+            {
+                "id": row[0],
+                "user_id": row[1],
+                "username": row[2],
+                "action": row[3],
+                "resource_type": row[4],
+                "resource_id": row[5],
+                "details": row[6] if row[6] else None,  # JSONB is already deserialized
+                "ip_address": str(row[7]) if row[7] else None,
+                "user_agent": row[8],
+                "created_at": row[9]
+            }
+            for row in results
+        ]
+        
+        return {
+            "logs": logs,
+            "total_count": total_count
+        }
+        
+    except Exception as e:
+        # Log error but return empty result to avoid breaking the application
+        print(f"Error in get_user_actions_log: {e}")
+        return {"logs": [], "total_count": 0}
+
+# ========================================================================================
+# SCHEDULE RUN LOG OPERATIONS
+# ========================================================================================
+
+def create_schedule_run_log(db, schedule_id: int, job_name: str, script_id: int, 
+                           script_name: str, created_by_user_id: Optional[int] = None) -> Dict[str, Any]:
+    """Create a new schedule run log entry."""
+    try:
+        cursor = db.cursor()
+        
+        insert_query = """
+            INSERT INTO dq.schedule_run_log 
+            (schedule_id, job_name, script_id, script_name, status, created_by_user_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, started_at;
+        """
+        
+        cursor.execute(insert_query, (
+            schedule_id, job_name, script_id, script_name, 'running', created_by_user_id
+        ))
+        
+        result = cursor.fetchone()
+        db.commit()
+        
+        return {
+            "success": True,
+            "log_id": result[0],
+            "started_at": result[1]
+        }
+        
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+
+def update_schedule_run_log(db, log_id: int, status: str, rows_affected: Optional[int] = None, 
+                           error_message: Optional[str] = None, auto_published: bool = False) -> Dict[str, Any]:
+    """Update a schedule run log entry with completion details."""
+    try:
+        cursor = db.cursor()
+        
+        # Calculate duration
+        duration_query = """
+            SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer as duration
+            FROM dq.schedule_run_log WHERE id = %s
+        """
+        cursor.execute(duration_query, (log_id,))
+        duration_result = cursor.fetchone()
+        duration_seconds = duration_result[0] if duration_result else None
+        
+        update_query = """
+            UPDATE dq.schedule_run_log 
+            SET status = %s, completed_at = CURRENT_TIMESTAMP, duration_seconds = %s,
+                rows_affected = %s, error_message = %s, auto_published = %s
+            WHERE id = %s
+            RETURNING completed_at;
+        """
+        
+        cursor.execute(update_query, (
+            status, duration_seconds, rows_affected, error_message, auto_published, log_id
+        ))
+        
+        result = cursor.fetchone()
+        db.commit()
+        
+        return {
+            "success": True,
+            "completed_at": result[0] if result else None,
+            "duration_seconds": duration_seconds
+        }
+        
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+
+def get_schedule_run_logs(db, limit: int = 100, offset: int = 0, 
+                         schedule_id: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get schedule run logs with optional filtering."""
+    try:
+        cursor = db.cursor()
+        
+        base_query = """
+            SELECT id, schedule_id, job_name, script_id, script_name, status,
+                   started_at, completed_at, duration_seconds, rows_affected,
+                   error_message, auto_published, created_by_user_id
+            FROM dq.schedule_run_log
+        """
+        
+        conditions = []
+        params = []
+        
+        if schedule_id:
+            conditions.append("schedule_id = %s")
+            params.append(schedule_id)
+            
+        if status:
+            conditions.append("status = %s")
+            params.append(status)
+            
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
+            
+        base_query += " ORDER BY started_at DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        cursor.execute(base_query, params)
+        results = cursor.fetchall()
+        
+        return [
+            {
+                "id": row[0],
+                "schedule_id": row[1],
+                "job_name": row[2],
+                "script_id": row[3],
+                "script_name": row[4],
+                "status": row[5],
+                "started_at": row[6],
+                "completed_at": row[7],
+                "duration_seconds": row[8],
+                "rows_affected": row[9],
+                "error_message": row[10],
+                "auto_published": row[11],
+                "created_by_user_id": row[12]
+            }
+            for row in results
+        ]
+        
+    except Exception as e:
+        return []

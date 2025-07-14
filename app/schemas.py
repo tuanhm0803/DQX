@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -29,7 +29,7 @@ class SQLScript(SQLScriptBase):
     updated_at: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SQLExecuteRequest(BaseModel):
     script_content: str
@@ -59,13 +59,13 @@ class Schedule(ScheduleBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         
 # --- User Authentication Schemas ---
 
 class UserBase(BaseModel):
     username: str
-    email: str = Field(..., description="User email address")
+    email: EmailStr = Field(..., description="User email address")
     full_name: Optional[str] = None
 
 class UserCreate(UserBase):
@@ -88,7 +88,7 @@ class UserInDB(UserBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class User(UserBase):
     id: int
@@ -96,7 +96,62 @@ class User(UserBase):
     role: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+# --- User Actions Log Schemas ---
+
+class UserActionLogBase(BaseModel):
+    action: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[int] = None
+    details: Optional[Dict[str, Any]] = None
+
+class UserActionLogCreate(UserActionLogBase):
+    pass
+
+class UserActionLog(UserActionLogBase):
+    id: int
+    user_id: int
+    username: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- Schedule Run Log Schemas ---
+
+class ScheduleRunLogBase(BaseModel):
+    schedule_id: int
+    job_name: str
+    script_id: int
+    script_name: str
+    status: str  # 'running', 'completed', 'failed'
+
+class ScheduleRunLogCreate(ScheduleRunLogBase):
+    created_by_user_id: Optional[int] = None
+
+class ScheduleRunLogUpdate(BaseModel):
+    status: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    rows_affected: Optional[int] = None
+    error_message: Optional[str] = None
+    auto_published: Optional[bool] = None
+
+class ScheduleRunLog(ScheduleRunLogBase):
+    id: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    rows_affected: Optional[int] = None
+    error_message: Optional[str] = None
+    auto_published: bool = False
+    created_by_user_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True

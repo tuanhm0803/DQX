@@ -1,0 +1,253 @@
+{% extends "base_layout.html" %}
+
+{% block title %}User Actions Log{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-history"></i> User Actions Log</h2>
+            <p class="text-muted">Monitor and audit user activities in the system</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#filtersCollapse" aria-expanded="false" aria-controls="filtersCollapse">
+                            <i class="fas fa-filter"></i> Filters
+                        </button>
+                    </h5>
+                </div>
+                <div class="collapse" id="filtersCollapse">
+                    <div class="card-body">
+                        <form method="GET" id="filterForm">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <label for="username">Username:</label>
+                                    <select class="form-control" name="username" id="username">
+                                        <option value="">All Users</option>
+                                        {% for user in unique_users %}
+                                        <option value="{{ user }}" {% if filters.username == user %}selected{% endif %}>{{ user }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="action">Action:</label>
+                                    <select class="form-control" name="action" id="action">
+                                        <option value="">All Actions</option>
+                                        {% for action in unique_actions %}
+                                        <option value="{{ action }}" {% if filters.action == action %}selected{% endif %}>{{ action }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="resource_type">Resource Type:</label>
+                                    <select class="form-control" name="resource_type" id="resource_type">
+                                        <option value="">All Types</option>
+                                        {% for resource_type in unique_resource_types %}
+                                        <option value="{{ resource_type }}" {% if filters.resource_type == resource_type %}selected{% endif %}>{{ resource_type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="limit">Records per page:</label>
+                                    <select class="form-control" name="limit" id="limit">
+                                        <option value="25" {% if limit == 25 %}selected{% endif %}>25</option>
+                                        <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                                        <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                                        <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-3">
+                                    <label for="date_from">Date From:</label>
+                                    <input type="date" class="form-control" name="date_from" id="date_from" value="{{ filters.date_from or '' }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="date_to">Date To:</label>
+                                    <input type="date" class="form-control" name="date_to" id="date_to" value="{{ filters.date_to or '' }}">
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary mr-2">
+                                        <i class="fas fa-search"></i> Apply Filters
+                                    </button>
+                                    <a href="/user-actions-log" class="btn btn-secondary">
+                                        <i class="fas fa-times"></i> Clear
+                                    </a>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Summary -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                Showing {{ logs|length }} of {{ total_count }} records 
+                {% if total_pages > 1 %}(Page {{ page }} of {{ total_pages }}){% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    {% if logs %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Resource</th>
+                                    <th>IP Address</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ log.username }}</strong>
+                                        <small class="text-muted d-block">ID: {{ log.user_id }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-{% if 'login' in log.action %}success{% elif 'delete' in log.action %}danger{% elif 'create' in log.action or 'register' in log.action %}primary{% elif 'update' in log.action %}warning{% else %}secondary{% endif %}">
+                                            {{ log.action }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if log.resource_type %}
+                                            <small class="text-muted">{{ log.resource_type }}</small>
+                                            {% if log.resource_id %}
+                                                <br><small class="text-info">ID: {{ log.resource_id }}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">N/A</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ log.ip_address or 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        {% if log.details %}
+                                            <button class="btn btn-sm btn-outline-info" onclick="showDetails({{ log.details|tojson }})">
+                                                <i class="fas fa-eye"></i> View
+                                            </button>
+                                        {% else %}
+                                            <small class="text-muted">No details</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Log pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ (page-1)) }}">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for p in range(1, total_pages + 1) %}
+                                {% if p == page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ p }}</span>
+                                </li>
+                                {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ p) }}">{{ p }}</a>
+                                </li>
+                                {% elif p == 4 and page > 6 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                                {% elif p == total_pages - 3 and page < total_pages - 5 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?{{ request.query_string.decode() | replace('page=' ~ page, 'page=' ~ (page+1)) }}">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No logs found</h5>
+                        <p class="text-muted">Try adjusting your filters or date range.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" role="dialog" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsModalLabel">Action Details</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <pre id="detailsContent" class="bg-light p-3 rounded"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showDetails(details) {
+    document.getElementById('detailsContent').textContent = JSON.stringify(details, null, 2);
+    $('#detailsModal').modal('show');
+}
+
+// Auto-submit form when filters change
+$(document).ready(function() {
+    $('#username, #action, #resource_type, #limit').change(function() {
+        $('#filterForm').submit();
+    });
+});
+</script>
+
+{% endblock %}

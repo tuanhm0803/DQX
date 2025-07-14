@@ -57,14 +57,14 @@
                                     <button type="submit" formaction="/editor/execute" class="btn btn-primary me-2">Execute</button>
                                     <button type="submit" formaction="/editor/save" class="btn btn-success me-2">Save</button>
                                     
-                                    {% if selected_script %}
+                                    {% if selected_script and current_user and current_user.role in ['admin', 'creator'] %}
                                     <a href="/editor/delete/{{ selected_script.id }}" class="btn btn-danger" 
                                        onclick="return confirm('Are you sure you want to delete this script?')">Delete</a>
                                     {% endif %}
                                 </div>
                             
-                                <!-- DQ operations only shown for saved scripts -->
-                                {% if selected_script %}
+                                <!-- DQ operations only shown for saved scripts and users with appropriate permissions -->
+                                {% if selected_script and selected_script.id and current_user and current_user.role in ['admin', 'creator'] %}
                                 <div class="mb-2">
                                     <fieldset class="d-inline-block ms-2">
                                         <legend class="visually-hidden">Data Operations</legend>
@@ -73,10 +73,17 @@
                                            onclick="return confirm('Are you sure you want to publish the results? This will move data from staging to production.')">Publish</a>
                                     </fieldset>
                                 </div>
+                                {% elif selected_script and selected_script.id and current_user and current_user.role == 'inputter' %}
+                                <div class="mb-2">
+                                    <div class="alert alert-warning small">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                        <strong>Access Restricted:</strong> You don't have permission to delete scripts, populate, or publish data. Contact an admin or creator for assistance.
+                                    </div>
+                                </div>
                                 {% endif %}
                             </div>
 
-                            {% if selected_script %}
+                            {% if selected_script and current_user and current_user.role in ['admin', 'creator'] %}
                             <div class="col-12">
                                 <div class="alert alert-info small">
                                     <strong>Data Pipeline:</strong> 

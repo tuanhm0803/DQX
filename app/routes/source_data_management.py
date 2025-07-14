@@ -9,7 +9,7 @@ from app.database import get_db
 from app.multi_db_manager import db_manager, get_db_connection
 from psycopg2 import sql, Error as PsycopgError
 from app.dependencies import templates, render_template
-from app.role_permissions import can_create_table, can_insert_data
+from app.role_permissions import can_create_table, can_insert_data, can_access_source_management
 
 # Router for HTML pages
 router = APIRouter(tags=["Pages"])
@@ -17,7 +17,8 @@ router = APIRouter(tags=["Pages"])
 @router.get("/source_data_management", response_class=HTMLResponse)
 async def source_data_management_page(
     request: Request, 
-    db = Depends(get_db)
+    db = Depends(get_db),
+    user = Depends(can_access_source_management)
 ):
     """
     Display the source data management page where users can create tables in the target database
@@ -230,7 +231,8 @@ async def insert_data(
 async def truncate_table(
     request: Request,
     db = Depends(get_db),
-    table_name: str = Form(...)
+    table_name: str = Form(...),
+    user = Depends(can_access_source_management)
 ):
     """
     Truncate a table in the stg schema.
@@ -271,7 +273,8 @@ async def truncate_table(
 async def drop_table(
     request: Request,
     db = Depends(get_db),
-    table_name: str = Form(...)
+    table_name: str = Form(...),
+    user = Depends(can_access_source_management)
 ):
     """
     Drop a table in the stg schema.
@@ -312,7 +315,8 @@ async def drop_table(
 async def view_table_data(
     request: Request,
     table_name: str,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    user = Depends(can_access_source_management)
 ):
     """
     View data from a table in the stg schema.
@@ -366,7 +370,7 @@ async def view_table_data(
 # API endpoints for multi-database management
 
 @router.get("/api/database_connections")
-async def get_database_connections(request: Request):
+async def get_database_connections(request: Request, user = Depends(can_access_source_management)):
     """Get all available database connections"""
     try:
         connections = db_manager.get_all_connections()
@@ -378,7 +382,7 @@ async def get_database_connections(request: Request):
         )
 
 @router.get("/api/database_connections/{connection_id}/schemas")
-async def get_connection_schemas(connection_id: str, request: Request):
+async def get_connection_schemas(connection_id: str, request: Request, user = Depends(can_access_source_management)):
     """Get all schemas for a specific database connection"""
     try:
         schemas = db_manager.get_schemas(connection_id)
@@ -390,7 +394,7 @@ async def get_connection_schemas(connection_id: str, request: Request):
         )
 
 @router.get("/api/database_connections/{connection_id}/schemas/{schema_name}/tables")
-async def get_schema_tables(connection_id: str, schema_name: str, request: Request):
+async def get_schema_tables(connection_id: str, schema_name: str, request: Request, user = Depends(can_access_source_management)):
     """Get all tables for a specific schema in a database connection"""
     try:
         tables = db_manager.get_tables(connection_id, schema_name)
@@ -402,7 +406,7 @@ async def get_schema_tables(connection_id: str, schema_name: str, request: Reque
         )
 
 @router.post("/api/database_connections/{connection_id}/test")
-async def test_database_connection(connection_id: str, request: Request):
+async def test_database_connection(connection_id: str, request: Request, user = Depends(can_access_source_management)):
     """Test a specific database connection"""
     try:
         result = db_manager.test_connection(connection_id)

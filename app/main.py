@@ -7,9 +7,10 @@ from starlette.middleware.sessions import SessionMiddleware
 import os
 from app import crud
 from app.database import get_db
-from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin
+from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin, user_actions_log
 from .dependencies import templates, render_template
 from .dependencies_auth import login_required, get_current_user_from_cookie
+from .middleware_logging import UserActionLoggingMiddleware
 
 # User middleware
 class UserMiddleware(BaseHTTPMiddleware):
@@ -40,9 +41,10 @@ class UserMiddleware(BaseHTTPMiddleware):
                     username = payload.get("sub")
                     if username:
                         # Get database connection safely
-                        conn = None
                         try:
-                            conn = next(get_db())
+                            # Use the database dependency properly
+                            db_gen = get_db()
+                            conn = next(db_gen)
                             user = crud.get_user_by_username(conn, username)
                             request.state.user = user
                         except Exception as db_error:
@@ -50,11 +52,12 @@ class UserMiddleware(BaseHTTPMiddleware):
                             print(f"Database error in UserMiddleware: {db_error}")
                             request.state.user = None
                         finally:
-                            if conn:
-                                try:
-                                    conn.close()
-                                except Exception:
-                                    pass  # Ignore close errors
+                            # Properly close the database connection
+                            try:
+                                if 'db_gen' in locals():
+                                    db_gen.close()
+                            except Exception:
+                                pass  # Ignore close errors
                 except JWTError:
                     request.state.user = None
                     
@@ -82,6 +85,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Add middlewares
 app.add_middleware(UserMiddleware)  # Add this first to have user in all requests
+app.add_middleware(UserActionLoggingMiddleware)  # Add logging middleware
 
 # Session middleware (with 1 hour timeout - 3600 seconds)
 app.add_middleware(
@@ -123,6 +127,7 @@ app.include_router(stats.page_router, tags=["Pages"], dependencies=[Depends(logi
 app.include_router(reference_tables.router, dependencies=[Depends(login_required)])  # Add the reference tables router
 app.include_router(source_data_management.router, dependencies=[Depends(login_required)])  # Add the source data management router
 app.include_router(admin.router, dependencies=[Depends(login_required)])  # Add the admin router
+app.include_router(user_actions_log.router, dependencies=[Depends(login_required)])  # Add the user actions log router
 
 
 # Mount static files directory

@@ -70,12 +70,19 @@
                                   {% if not schedule or schedule.is_active %}checked{% endif %}>
                             <label class="form-check-label" for="is-active">Is Active</label>
                         </div>
+                        {% if current_user and current_user.role in ['admin', 'creator'] %}
                         <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" id="auto-publish" name="auto_publish" value="true" 
                                   {% if schedule and schedule.auto_publish %}checked{% endif %}>
                             <label class="form-check-label" for="auto-publish">Auto Publish Results</label>
                             <div class="form-text">Automatically publish script results to the central bad_detail table after execution</div>
                         </div>
+                        {% else %}
+                        <div class="alert alert-warning small">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <strong>Auto-publish disabled:</strong> You don't have permission to enable auto-publish. Contact an admin or creator.
+                        </div>
+                        {% endif %}
                         <button type="submit" class="btn btn-primary">Save Schedule</button>
                         {% if schedule %}
                         <a href="/schedules/" class="btn btn-secondary">Cancel</a>
@@ -87,6 +94,12 @@
             <!-- Scheduled Jobs List -->
             <div class="glass-card p-4 mb-4 shadow">
                 <h2 class="h4 mb-3">Scheduled Jobs</h2>
+                {% if current_user and current_user.role == 'inputter' %}
+                <div class="alert alert-info small mb-3">
+                    <i class="bi bi-info-circle-fill"></i>
+                    <strong>Note:</strong> You can view and edit scheduled jobs, but cannot delete them. Contact an admin or creator for deletions.
+                </div>
+                {% endif %}
                 <table class="table table-hover">
                         <thead>
                             <tr>
@@ -108,12 +121,35 @@
                                 <td>{{ 'Yes' if schedule.auto_publish else 'No' }}</td>
                                 <td>
                                     <a href="/schedules/edit/{{ schedule.id }}" class="btn btn-sm btn-primary">Edit</a>
+                                    {% if current_user and current_user.role in ['admin', 'creator'] %}
                                     <a href="/schedules/delete/{{ schedule.id }}" class="btn btn-sm btn-danger">Delete</a>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Run Logs Section -->
+        <div class="col-12 mt-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Recent Schedule Runs
+                        <button class="btn btn-sm btn-outline-info float-right" onclick="refreshRunLogs()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="runLogsContainer">
+                        <div class="text-center py-3">
+                            <i class="fas fa-spinner fa-spin"></i> Loading run logs...
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -159,6 +195,82 @@
                 
                 // Note: is_active checkbox is set in the HTML based on schedule.is_active
             {% endif %}
+            
+            // Load initial run logs
+            refreshRunLogs();
+        });
+        
+        function refreshRunLogs() {
+            const container = document.getElementById('runLogsContainer');
+            container.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Loading run logs...</div>';
+            
+            fetch('/api/schedule-run-logs?limit=20')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.data.length > 0) {
+                        const logs = data.data;
+                        let html = '<div class="table-responsive">';
+                        html += '<table class="table table-striped table-hover">';
+                        html += '<thead class="thead-light">';
+                        html += '<tr>';
+                        html += '<th>Started</th>';
+                        html += '<th>Job Name</th>';
+                        html += '<th>Script</th>';
+                        html += '<th>Status</th>';
+                        html += '<th>Duration</th>';
+                        html += '<th>Rows</th>';
+                        html += '<th>Details</th>';
+                        html += '</tr>';
+                        html += '</thead>';
+                        html += '<tbody>';
+                        
+                        logs.forEach(log => {
+                            const startedAt = new Date(log.started_at).toLocaleString();
+                            const duration = log.duration_seconds ? `${log.duration_seconds}s` : '-';
+                            const rowsAffected = log.rows_affected !== null ? log.rows_affected.toLocaleString() : '-';
+                            const statusClass = log.status === 'completed' ? 'success' : 
+                                              log.status === 'failed' ? 'danger' : 
+                                              log.status === 'running' ? 'primary' : 'secondary';
+                            
+                            html += '<tr>';
+                            html += `<td><small>${startedAt}</small></td>`;
+                            html += `<td>${log.job_name}</td>`;
+                            html += `<td><small class="text-muted">${log.script_name}</small></td>`;
+                            html += `<td><span class="badge badge-${statusClass}">${log.status}</span></td>`;
+                            html += `<td>${duration}</td>`;
+                            html += `<td>${rowsAffected}</td>`;
+                            html += '<td>';
+                            if (log.error_message) {
+                                html += `<button class="btn btn-sm btn-outline-danger" onclick="showError('${log.error_message.replace(/'/g, '\\'')}')">`;
+                                html += '<i class="fas fa-exclamation-triangle"></i> Error';
+                                html += '</button>';
+                            } else if (log.auto_published) {
+                                html += '<span class="badge badge-info">Auto Published</span>';
+                            } else {
+                                html += '<small class="text-muted">-</small>';
+                            }
+                            html += '</td>';
+                            html += '</tr>';
+                        });
+                        
+                        html += '</tbody>';
+                        html += '</table>';
+                        html += '</div>';
+                        
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<div class="text-center py-4"><i class="fas fa-clock"></i><br>No schedule runs found</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading run logs:', error);
+                    container.innerHTML = '<div class="text-center py-4 text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading run logs</div>';
+                });
+        }
+        
+        function showError(message) {
+            alert(message);
+        }
         });
     </script>
 {% endblock %}

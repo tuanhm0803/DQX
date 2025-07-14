@@ -10,29 +10,18 @@
                 <li class="nav-item">
                     <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">Home</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/editor' in request.url.path %}active{% endif %}" href="/editor">DQ Scripts</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/bad_detail_query' in request.url.path %}active{% endif %}" href="/bad_detail_query">DQ Errors Query</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/visualization' in request.url.path %}active{% endif %}" href="/visualization">DQ Visualization</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/references' in request.url.path %}active{% endif %}" href="/references">Reference Tables</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if '/source_data_management' in request.url.path %}active{% endif %}" href="/source_data_management">Source Data</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/docs" target="_blank">API Docs</a>
-                </li>
                 {% if current_user %}
                 {% if current_user.role == 'admin' %}
                 <li class="nav-item">
                     <a class="nav-link {% if '/admin' in request.url.path %}active{% endif %}" href="/admin/users">
                         <i class="bi bi-people me-1"></i> User Management
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.role in ['admin', 'editor'] %}
+                <li class="nav-item">
+                    <a class="nav-link {% if '/user-actions-log' in request.url.path %}active{% endif %}" href="/user-actions-log">
+                        <i class="bi bi-clock-history me-1"></i> Actions Log
                     </a>
                 </li>
                 {% endif %}
@@ -55,8 +44,10 @@
                         <i class="bi bi-box-arrow-in-right me-1"></i> Login
                     </a>
                 </li>
-
                 {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+                </li>
             </ul>
         </div>
     </div>
