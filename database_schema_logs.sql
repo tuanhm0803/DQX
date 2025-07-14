@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS dq.user_actions_log (
     details JSONB,
     ip_address INET,
     user_agent TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Scheduled Jobs Running Log Table
@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS dq.schedule_run_log (
     script_id INTEGER REFERENCES dq.dq_sql_scripts(id),
     script_name VARCHAR(255),
     status VARCHAR(50) NOT NULL, -- 'running', 'completed', 'failed'
-    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP WITH TIME ZONE,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
     duration_seconds INTEGER,
     rows_affected INTEGER,
     error_message TEXT,
