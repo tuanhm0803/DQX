@@ -103,7 +103,7 @@ def get_user_by_id(db, user_id: int) -> Optional[User]:
     return _get_single_user(db, query, (user_id,))
 
 
-def get_user_by_username(db, username: str) -> Optional[User]:
+def get_user_by_username(db, username: str | None) -> Optional[User]:
     """Retrieve a user by their username."""
     query = """
         SELECT id, username, email, full_name, hashed_password, is_active, role, created_at, updated_at
