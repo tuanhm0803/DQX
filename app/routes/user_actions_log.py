@@ -5,7 +5,7 @@ Routes for user actions log and audit functionality.
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from app import crud
-from app.role_permissions import can_view_logs
+from app.role_permissions import can_admin_creator_access
 from app.database import get_db
 from app.dependencies import render_template
 from typing import Optional
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/user-actions-log", response_class=HTMLResponse)
 async def user_actions_log_page(
     request: Request,
-    current_user=Depends(can_view_logs),
+    current_user=Depends(can_admin_creator_access),
     db=Depends(get_db),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=500),
@@ -99,7 +99,7 @@ async def user_actions_log_page(
 
 @router.get("/api/user-actions-log")
 async def get_user_actions_log_api(
-    current_user=Depends(can_view_logs),
+    current_user=Depends(can_admin_creator_access),
     db=Depends(get_db),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=500),

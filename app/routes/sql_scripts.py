@@ -5,7 +5,7 @@ from app import crud, schemas
 from app.database import get_db
 from app.dependencies import templates, render_template
 from app.dependencies_auth import get_current_user_from_cookie
-from app.role_permissions import can_publish_populate, can_delete_scripts
+from app.role_permissions import can_admin_creator_access
 
 # Router for API endpoints
 api_router = APIRouter()
@@ -87,13 +87,13 @@ async def execute_script_form(
     })
 
 @page_router.get("/editor/delete/{script_id}")
-async def delete_script_form(script_id: int, db = Depends(get_db), user = Depends(can_delete_scripts)):
+async def delete_script_form(script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     crud.delete_sql_script(db, script_id)
     return RedirectResponse(url="/editor", status_code=303)
 
 # Add populate and publish page routes
 @page_router.get("/editor/{script_id}/populate")
-async def populate_table_form(request: Request, script_id: int, db = Depends(get_db), user = Depends(can_publish_populate)):
+async def populate_table_form(request: Request, script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     try:
         # Get script name for better messaging
         selected_script = crud.get_sql_script(db, script_id)
@@ -130,7 +130,7 @@ async def populate_table_form(request: Request, script_id: int, db = Depends(get
         })
 
 @page_router.get("/editor/{script_id}/publish")
-async def publish_results_form(request: Request, script_id: int, db = Depends(get_db), user = Depends(can_publish_populate)):
+async def publish_results_form(request: Request, script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     try:
         # Get script name for better messaging
         selected_script = crud.get_sql_script(db, script_id)
@@ -188,7 +188,7 @@ def update_script(script_id: int, script: schemas.SQLScriptCreate, db = Depends(
     return crud.update_sql_script(db, script_id, script.model_dump())
 
 @api_router.delete("/{script_id}")
-def delete_script(script_id: int, db = Depends(get_db), user = Depends(can_delete_scripts)):
+def delete_script(script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     result = crud.delete_sql_script(db, script_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail="SQL script not found")
@@ -203,7 +203,7 @@ def execute_script(request: schemas.SQLExecuteRequest, db = Depends(get_db)):
 
 # Add populate and publish endpoints
 @api_router.post("/{script_id}/populate_table")
-def populate_table(script_id: int, db = Depends(get_db), user = Depends(can_publish_populate)):
+def populate_table(script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     """Populate the staging table for a specific SQL script"""
     try:
         result = crud.populate_script_result_table(db, script_id)
@@ -214,7 +214,7 @@ def populate_table(script_id: int, db = Depends(get_db), user = Depends(can_publ
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 @api_router.post("/{script_id}/publish")
-def publish_results(script_id: int, db = Depends(get_db), user = Depends(can_publish_populate)):
+def publish_results(script_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     """Publish results from the script's staging table to the main bad_detail table."""
     try:
         result = crud.publish_script_results(db, script_id)

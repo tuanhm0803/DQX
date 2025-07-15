@@ -5,7 +5,7 @@ from app import crud, schemas
 from app.database import get_db
 from app.dependencies import templates, render_template
 from app.dependencies_auth import get_current_user_from_cookie
-from app.role_permissions import can_delete_schedules
+from app.role_permissions import can_admin_creator_access
 
 router = APIRouter()
 
@@ -106,7 +106,7 @@ def update_schedule_form(
     return RedirectResponse(url="/schedules/", status_code=303)
 
 @router.get("/schedules/delete/{schedule_id}")
-def delete_schedule_form(schedule_id: int, db = Depends(get_db), user = Depends(can_delete_schedules)):
+def delete_schedule_form(schedule_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     result = crud.delete_schedule(db, schedule_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -144,7 +144,7 @@ def api_update_schedule(schedule_id: int, schedule: schemas.ScheduleUpdate, db =
     return db_schedule
 
 @router.delete("/api/schedules/{schedule_id}")
-def api_delete_schedule(schedule_id: int, db = Depends(get_db), user = Depends(can_delete_schedules)):
+def api_delete_schedule(schedule_id: int, db = Depends(get_db), user = Depends(can_admin_creator_access)):
     """Delete a schedule."""
     result = crud.delete_schedule(db, schedule_id)
     if not result["success"]:

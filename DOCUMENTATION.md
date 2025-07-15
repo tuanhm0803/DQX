@@ -287,6 +287,48 @@ DQX/
 ### 1. Environment Configuration
 Create a `.env` file in the DQX root directory with the following structure:
 
+#### New Individual Parameter Format (Recommended)
+```bash
+# DQX Database Configuration
+
+# Database Type: postgresql or oracle
+DB_TYPE=postgresql
+
+# Database Connection Parameters
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=123456
+
+# Target database - where tables will be created (your working database)
+TARGET_DB_NAME=Working Database
+TARGET_DB_HOST=localhost
+TARGET_DB_PORT=5432
+TARGET_DB_NAME_DB=postgres
+TARGET_DB_USER=postgres
+TARGET_DB_PASSWORD=123456
+TARGET_DB_DESC=Primary working database where tables are created
+
+# Source databases - where data will be queried from (these should be different from your target database)
+DB_SOURCE_PROD_NAME=Production Database
+DB_SOURCE_PROD_HOST=prod-server
+DB_SOURCE_PROD_PORT=5432
+DB_SOURCE_PROD_NAME_DB=prod_db
+DB_SOURCE_PROD_USER=prod_user
+DB_SOURCE_PROD_PASSWORD=prod_password
+DB_SOURCE_PROD_DESC=Production database (source data)
+
+DB_SOURCE_STAGING_NAME=Staging Environment
+DB_SOURCE_STAGING_HOST=staging-server
+DB_SOURCE_STAGING_PORT=5432
+DB_SOURCE_STAGING_NAME_DB=staging_db
+DB_SOURCE_STAGING_USER=staging_user
+DB_SOURCE_STAGING_PASSWORD=staging_password
+DB_SOURCE_STAGING_DESC=Staging database (source data)
+```
+
+#### Legacy URL Format (Still Supported)
 ```bash
 # Primary database connection (for authentication and core app operations)
 DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
@@ -297,7 +339,6 @@ TARGET_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 TARGET_DB_DESC=Primary working database where tables are created
 
 # Source databases - where data will be queried from
-DB_SOURCE_PROD_NAME=Production Database
 DB_SOURCE_PROD_URL=postgresql://prod_user:prod_password@prod-server:5432/prod_db
 DB_SOURCE_PROD_DESC=Production database (source data)
 
@@ -318,59 +359,144 @@ pip install -r requirements.txt
 
 ### 3. Database Schema Setup
 Before running the application, ensure the required database schema is created in your **target database**:
-    ```sql
-    -- Create the DQ schema if it doesn't exist
-    CREATE SCHEMA IF NOT EXISTS dq;
-    
-    -- Create core tables
-    CREATE TABLE dq.dq_sql_scripts (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        content TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
 
-    CREATE TABLE dq.bad_detail (
-        rule_id VARCHAR(20),
-        source_id VARCHAR(20),
-        source_uid VARCHAR(500),
-        data_value VARCHAR(2000),
-        txn_date DATE,
-        PRIMARY KEY (rule_id, source_id, source_uid) 
-    );
-    
-    -- Create reference tables
-    CREATE TABLE dq.rule_ref (
-        rule_id VARCHAR(20) PRIMARY KEY,
-        rule_name VARCHAR(200) NOT NULL,
-        rule_description TEXT
-    );
-    
-    CREATE TABLE dq.source_ref (
-        source_id VARCHAR(20) PRIMARY KEY,
-        source_name VARCHAR(200) NOT NULL,
-        source_description TEXT
-    );
-    
-    -- Create user authentication table
-    CREATE TABLE users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        full_name VARCHAR(100),
-        hashed_password VARCHAR(255) NOT NULL,
-        is_active BOOLEAN DEFAULT TRUE,
-        role VARCHAR(20) NOT NULL DEFAULT 'inputter',
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        CONSTRAINT users_role_check CHECK (role IN ('admin', 'creator', 'inputter'))
-    );
-    
-    -- Create STG schema for table creation
-    CREATE SCHEMA IF NOT EXISTS stg;
-    ```
+```sql
+-- Create main DQ schema for data quality tables
+CREATE SCHEMA IF NOT EXISTS dq;
+
+-- Create users table for authentication
+CREATE TABLE IF NOT EXISTS dq.users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    full_name VARCHAR(100),
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    role VARCHAR(20) NOT NULL DEFAULT 'inputter',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT users_role_check CHECK (role IN ('admin', 'creator', 'inputter'))
+);
+
+-- Create STG schema for table creation
+CREATE SCHEMA IF NOT EXISTS stg;
+
+-- Create SQL scripts table
+CREATE TABLE IF NOT EXISTS dq.sql_scripts (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(50),
+    updated_by VARCHAR(50)
+);
+
+-- Create scheduled jobs table
+CREATE TABLE IF NOT EXISTS dq.scheduled_jobs (
+    id SERIAL PRIMARY KEY,
+    script_id INTEGER REFERENCES dq.sql_scripts(id) ON DELETE CASCADE,
+    schedule_type VARCHAR(20) NOT NULL CHECK (schedule_type IN ('daily', 'weekly', 'monthly')),
+    schedule_time TIME NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run TIMESTAMPTZ,
+    next_run TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(50)
+);
+
+-- Create bad detail table for data quality results
+CREATE TABLE IF NOT EXISTS dq.bad_detail (
+    id SERIAL PRIMARY KEY,
+    rule_id INTEGER NOT NULL,
+    source_id INTEGER NOT NULL,
+    source_uid VARCHAR(255) NOT NULL,
+    data_value TEXT,
+    txn_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(rule_id, source_id, source_uid)
+);
+
+-- Create reference tables for rules and sources
+CREATE TABLE IF NOT EXISTS dq.rule_reference (
+    rule_id INTEGER PRIMARY KEY,
+    rule_name VARCHAR(255) NOT NULL,
+    rule_description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS dq.source_reference (
+    source_id INTEGER PRIMARY KEY,
+    source_name VARCHAR(255) NOT NULL,
+    source_description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create user actions log table (timezone-free for Oracle compatibility)
+CREATE TABLE IF NOT EXISTS dq.user_actions_log (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id VARCHAR(100),
+    details TEXT,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create schedule run log table (timezone-free for Oracle compatibility)
+CREATE TABLE IF NOT EXISTS dq.schedule_run_log (
+    id SERIAL PRIMARY KEY,
+    schedule_id INTEGER REFERENCES dq.scheduled_jobs(id) ON DELETE CASCADE,
+    script_id INTEGER NOT NULL,
+    script_name VARCHAR(255),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'error', 'running')),
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    rows_affected INTEGER,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_user_actions_log_username ON dq.user_actions_log(username);
+CREATE INDEX IF NOT EXISTS idx_user_actions_log_created_at ON dq.user_actions_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_log_schedule_id ON dq.schedule_run_log(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_log_created_at ON dq.schedule_run_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_bad_detail_rule_source ON dq.bad_detail(rule_id, source_id);
+```
+
+**Important Schema Notes:**
+
+1. **Role-Based Security Tables**: 
+   - `dq.users` table with role-based access control (admin, creator, inputter)
+   - Role constraints ensure data integrity
+
+2. **Audit and Logging Tables**:
+   - `dq.user_actions_log` tracks all user actions for security auditing
+   - `dq.schedule_run_log` tracks scheduled job executions
+   - **Timezone-free**: Uses `TIMESTAMP` (no timezone) for Oracle database compatibility
+
+3. **Core Application Tables**:
+   - `dq.sql_scripts` stores user-created SQL scripts with metadata
+   - `dq.scheduled_jobs` manages automated script execution
+   - `dq.bad_detail` stores data quality results
+   - `dq.rule_reference` and `dq.source_reference` provide lookup data
+
+4. **Schema Organization**:
+   - `dq` schema: Core application data and logs
+   - `stg` schema: Staging tables for temporary data processing
+
+5. **Performance Optimization**:
+   - Indexes on frequently queried columns
+   - Foreign key constraints for data integrity
+   - Unique constraints to prevent duplicates
+
+6. **Oracle Compatibility**:
+   - All datetime fields in log tables use `TIMESTAMP` without timezone
+   - Schema designed to work with both PostgreSQL and Oracle databases
 
 ### 4. Source Database Setup
 For each source database you want to connect to:
@@ -401,10 +527,23 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## Key Design Considerations
 
-*   **Database Interaction**: All database operations are now performed using `psycopg2` directly, offering fine-grained control over SQL and removing the SQLAlchemy ORM layer.
+*   **Database Interaction**: All database operations are performed using `psycopg2` directly, offering fine-grained control over SQL and removing the SQLAlchemy ORM layer.
 *   **SQL Safety**: `psycopg2.sql` module is used for constructing SQL queries with dynamic identifiers and placeholders, mitigating SQL injection risks.
+*   **Role-Based Security**: Comprehensive permission system with three user roles (admin, creator, inputter) and function-level access control.
+*   **Simplified Permissions**: Consolidated permission functions reduce code complexity while maintaining security:
+    - `can_admin_creator_access()` replaces six individual permission functions
+    - Clear separation between admin-only and admin/creator features
+    - Inputter role restrictions are enforced at both backend and frontend levels
+*   **Audit and Compliance**: 
+    - All user actions are automatically logged to `dq.user_actions_log`
+    - Schedule job runs are tracked in `dq.schedule_run_log` 
+    - Timezone-free logging for Oracle database compatibility
+*   **Database Flexibility**: 
+    - Individual parameter configuration supports easy database switching
+    - Oracle database support prepared (PostgreSQL to Oracle migration ready)
+    - Backward compatibility with legacy URL-based configuration
 *   **SQL Script Validation**: A strict validation (`_validate_sql_script_columns` in `crud.py`) is enforced for all saved and executed SQL scripts. They must be `SELECT` statements and output exactly five columns: `rule_id`, `source_id`, `source_uid`, `data_value`, and `txn_date`. This ensures data consistency for downstream processes.
-*   **Unique Script Names**: The application now prevents the creation or renaming of SQL scripts to a name that is already in use, ensuring that every script has a unique identifier.
+*   **Unique Script Names**: The application prevents the creation or renaming of SQL scripts to a name that is already in use, ensuring that every script has a unique identifier.
 *   **Staging Table Automation**: For each validated SQL script, the application automatically manages a corresponding staging table in the `stg` schema. This allows the results of any script to be materialized into a persistent, queryable table that can be refreshed on demand.
 *   **Publishing Workflow**: A two-step process allows for safe data validation. First, results are loaded into a temporary staging table using the "Populate" button. After verification, the "Publish" button merges these results into the final `dq.bad_detail` table. The merge logic is idempotent based on `(rule_id, source_id)` pairs, providing a controlled and reliable way to update production data quality records.
 *   **Separation of Concerns**: The project maintains a structure with separate modules for database connection (`database.py`), data schemas (`schemas.py`), CRUD operations (`crud.py`), and API routing (`routes/`).
@@ -413,6 +552,35 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 *   **Reference Data Integration**: Rule and source reference tables are integrated throughout the application, providing human-readable names alongside IDs for better usability.
 *   **Visualization Dashboard**: The application includes a dashboard with Chart.js visualizations to help users analyze data quality issues over time and across different rules and sources.
 *   **Modern UI**: The frontend uses Bootstrap and custom CSS with responsive design for a consistent and modern look and feel across all pages. The navigation bar is optimized for both desktop and mobile devices.
+
+## Recent Updates and Features
+
+### User Action Logging
+- **Automatic Logging**: All user actions are automatically tracked via middleware
+- **Audit Trail**: Complete history of who did what and when
+- **Log Viewer**: Admin and creator users can view logs via `/user-actions-log` page
+- **Filtering**: Filter logs by username, action type, resource type, and date range
+- **Security**: Inputter users cannot view action logs
+
+### Schedule Run Logging  
+- **Job Tracking**: All scheduled job executions are logged with status and timing
+- **Error Capture**: Failed jobs include detailed error messages
+- **Performance Metrics**: Track execution time and rows affected
+- **Integration**: Schedule logs are visible in the scheduler interface
+
+### Simplified Role Permissions
+- **Consolidated Functions**: Reduced from 6 permission functions to 3 main functions
+- **Clear Access Control**: 
+  - Admin: Full access including user management
+  - Creator: Data operations but no user management  
+  - Inputter: Read-only access, cannot modify data
+- **Frontend Integration**: Role restrictions enforced in templates and navigation
+
+### Oracle Database Preparation
+- **Configuration Ready**: Individual parameter format supports Oracle connections
+- **Timezone Compatibility**: All log tables use timezone-free timestamps
+- **Schema Compatibility**: Database schema designed for cross-platform support
+- **Migration Path**: Clear upgrade path from PostgreSQL to Oracle
 
 ## Utilities
 
@@ -628,3 +796,62 @@ For more examples, see the `utils/logger_examples.py` file.
        CONSTRAINT users_role_check CHECK (role IN ('admin', 'creator', 'inputter'))
    );
    ```
+
+#### Oracle Database Support
+To switch to Oracle database, simply change the database type and connection parameters:
+```bash
+# Database Type: oracle
+DB_TYPE=oracle
+DB_HOST=oracle-server
+DB_PORT=1521
+DB_NAME=ORCL
+DB_USER=dqx_user
+DB_PASSWORD=dqx_password
+```
+
+**Note**: Oracle support requires additional setup:
+- Install Oracle Instant Client
+- Install `cx_Oracle` or `oracledb` Python package
+- Update connection logic in `app/database.py` (currently prepared but not fully implemented)
+
+#### Configuration Benefits
+The new individual parameter format provides several advantages:
+
+1. **Database Flexibility**: Easy switching between PostgreSQL and Oracle
+2. **Clear Configuration**: Individual parameters are more readable than URL strings
+3. **Environment Specific**: Easy to override individual parameters for different environments
+4. **Future Ready**: Prepared for Oracle integration when needed
+5. **Backward Compatible**: Still supports legacy URL format
+
+### 2. Role-Based Access Control
+
+The application implements a simplified role-based permission system:
+
+#### User Roles
+- **Admin**: Full access to all functionality including user management
+- **Creator**: Can create, modify, and delete data but cannot manage users
+- **Inputter**: Read-only access, cannot create/modify/delete data or access advanced features
+
+#### Permission Functions
+The application uses a consolidated permission system:
+
+- **`check_admin_access()`**: Admin-only access (user management)
+- **`check_creator_access()`**: Admin and Creator access (general operations)
+- **`can_publish_populate()`**: Admin and Creator access (script publishing)
+- **`can_manage_users()`**: Admin-only access (user management)
+- **`can_admin_creator_access()`**: Admin and Creator access (consolidated function for):
+  - Create tables
+  - Insert data
+  - Access source data management
+  - Delete scripts
+  - Delete scheduled jobs
+  - View action logs
+
+#### Restricted Features for Inputters
+Inputters are blocked from:
+- Publishing and populating scripts in DQ Scripts page
+- Accessing Source Data Management page
+- Creating or modifying tables
+- Deleting scripts or scheduled jobs
+- Viewing user action logs
+- Managing users

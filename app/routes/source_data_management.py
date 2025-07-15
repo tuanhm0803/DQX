@@ -9,7 +9,7 @@ from app.database import get_db
 from app.multi_db_manager import db_manager, get_db_connection
 from psycopg2 import sql, Error as PsycopgError
 from app.dependencies import templates, render_template
-from app.role_permissions import can_create_table, can_insert_data, can_access_source_management
+from app.role_permissions import can_admin_creator_access
 
 # Router for HTML pages
 router = APIRouter(tags=["Pages"])
@@ -18,7 +18,7 @@ router = APIRouter(tags=["Pages"])
 async def source_data_management_page(
     request: Request, 
     db = Depends(get_db),
-    user = Depends(can_access_source_management)
+    user = Depends(can_admin_creator_access)
 ):
     """
     Display the source data management page where users can create tables in the target database
@@ -92,7 +92,7 @@ async def source_data_management_page(
 @router.post("/source_data_management/create_table")
 async def create_table(
     request: Request,
-    user = Depends(can_create_table),
+    user = Depends(can_admin_creator_access),
     table_name: str = Form(...),
     sql_script: str = Form(...),
     source_connections: str = Form(None)  # JSON string of selected source connections
@@ -164,7 +164,7 @@ async def create_table(
 @router.post("/source_data_management/insert_data")
 async def insert_data(
     request: Request,
-    user = Depends(can_insert_data),
+    user = Depends(can_admin_creator_access),
     db = Depends(get_db),
     table_name: str = Form(...),
     insert_script: str = Form(...)
@@ -232,7 +232,7 @@ async def truncate_table(
     request: Request,
     db = Depends(get_db),
     table_name: str = Form(...),
-    user = Depends(can_access_source_management)
+    user = Depends(can_admin_creator_access)
 ):
     """
     Truncate a table in the stg schema.
@@ -274,7 +274,7 @@ async def drop_table(
     request: Request,
     db = Depends(get_db),
     table_name: str = Form(...),
-    user = Depends(can_access_source_management)
+    user = Depends(can_admin_creator_access)
 ):
     """
     Drop a table in the stg schema.
@@ -316,7 +316,7 @@ async def view_table_data(
     request: Request,
     table_name: str,
     db = Depends(get_db),
-    user = Depends(can_access_source_management)
+    user = Depends(can_admin_creator_access)
 ):
     """
     View data from a table in the stg schema.
@@ -370,7 +370,7 @@ async def view_table_data(
 # API endpoints for multi-database management
 
 @router.get("/api/database_connections")
-async def get_database_connections(request: Request, user = Depends(can_access_source_management)):
+async def get_database_connections(request: Request, user = Depends(can_admin_creator_access)):
     """Get all available database connections"""
     try:
         connections = db_manager.get_all_connections()
@@ -382,7 +382,7 @@ async def get_database_connections(request: Request, user = Depends(can_access_s
         )
 
 @router.get("/api/database_connections/{connection_id}/schemas")
-async def get_connection_schemas(connection_id: str, request: Request, user = Depends(can_access_source_management)):
+async def get_connection_schemas(connection_id: str, request: Request, user = Depends(can_admin_creator_access)):
     """Get all schemas for a specific database connection"""
     try:
         schemas = db_manager.get_schemas(connection_id)
@@ -394,7 +394,7 @@ async def get_connection_schemas(connection_id: str, request: Request, user = De
         )
 
 @router.get("/api/database_connections/{connection_id}/schemas/{schema_name}/tables")
-async def get_schema_tables(connection_id: str, schema_name: str, request: Request, user = Depends(can_access_source_management)):
+async def get_schema_tables(connection_id: str, schema_name: str, request: Request, user = Depends(can_admin_creator_access)):
     """Get all tables for a specific schema in a database connection"""
     try:
         tables = db_manager.get_tables(connection_id, schema_name)
@@ -406,7 +406,7 @@ async def get_schema_tables(connection_id: str, schema_name: str, request: Reque
         )
 
 @router.post("/api/database_connections/{connection_id}/test")
-async def test_database_connection(connection_id: str, request: Request, user = Depends(can_access_source_management)):
+async def test_database_connection(connection_id: str, request: Request, user = Depends(can_admin_creator_access)):
     """Test a specific database connection"""
     try:
         result = db_manager.test_connection(connection_id)

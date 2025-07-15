@@ -47,49 +47,136 @@ class MultiDatabaseManager:
     
     def _load_connections_from_env(self):
         """Load database connections from environment variables"""
-        # Load the primary/default connection (for app operations)
-        default_url = os.getenv("DATABASE_URL")
-        if default_url:
-            self.add_connection_from_url("default", "Default Database", default_url, "Primary application database")
+        self._load_default_connection()
+        self._load_target_connection()
+        self._load_source_connections()
+    
+    def _build_connection_url(self, db_type: str, user: str, password: str, host: str, port: str, db_name: str) -> str:
+        """Build connection URL based on database type"""
+        if db_type.lower() == "postgresql":
+            return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+        elif db_type.lower() == "oracle":
+            return f"oracle+cx_oracle://{user}:{password}@{host}:{port}/{db_name}"
+        else:
+            raise ValueError(f"Unsupported database type: {db_type}")
+    
+    def _load_default_connection(self):
+        """Load the primary/default connection (for app operations)"""
+        db_type = os.getenv("DB_TYPE", "postgresql")
         
-        # Load the target database (where tables will be created)
-        target_url = os.getenv("TARGET_DB_URL")
-        if target_url:
+        # Try individual parameters first
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("DB_NAME")
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        
+        if all([db_host, db_port, db_name, db_user, db_password]):
+            default_url = self._build_connection_url(db_type, db_user, db_password, db_host, db_port, db_name)  # type: ignore
+            self.add_connection_from_url("default", "Default Database", default_url, "Primary application database")
+        else:
+            # Fallback to legacy DATABASE_URL
+            default_url = os.getenv("DATABASE_URL")
+            if default_url:
+                self.add_connection_from_url("default", "Default Database", default_url, "Primary application database")
+    
+    def _load_target_connection(self):
+        """Load the target database (where tables will be created)"""
+        db_type = os.getenv("DB_TYPE", "postgresql")
+        
+        # Try individual parameters first
+        target_host = os.getenv("TARGET_DB_HOST")
+        target_port = os.getenv("TARGET_DB_PORT") 
+        target_db_name = os.getenv("TARGET_DB_NAME_DB")
+        target_user = os.getenv("TARGET_DB_USER")
+        target_password = os.getenv("TARGET_DB_PASSWORD")
+        
+        if all([target_host, target_port, target_db_name, target_user, target_password]):
+            target_url = self._build_connection_url(db_type, target_user, target_password, target_host, target_port, target_db_name)  # type: ignore
             target_name = os.getenv("TARGET_DB_NAME", "Target Database")
             target_desc = os.getenv("TARGET_DB_DESC", "Target database for table creation")
             self.add_connection_from_url("target", target_name, target_url, target_desc)
+        else:
+            # Fallback to legacy TARGET_DB_URL
+            target_url = os.getenv("TARGET_DB_URL")
+            if target_url:
+                target_name = os.getenv("TARGET_DB_NAME", "Target Database")
+                target_desc = os.getenv("TARGET_DB_DESC", "Target database for table creation")
+                self.add_connection_from_url("target", target_name, target_url, target_desc)
+    
+    def _load_source_connections(self):
+        """Load source database connections (where data will be queried from)"""
+        source_ids = self._discover_source_connection_ids()
         
-        # Load source database connections (where data will be queried from)
-        # Support both DB_SOURCE_<ID>_* and DB_CONN_<ID>_* formats for backward compatibility
+        for format_type, source_id in source_ids:
+            self._load_single_source_connection(format_type, source_id)
+    
+    def _discover_source_connection_ids(self) -> set:
+        """Discover all source connection IDs from environment variables"""
         source_ids = set()
         
-        # Check for DB_SOURCE_ format
+        # Check for new DB_SOURCE_<ID>_HOST format (individual parameters)
+        for key in os.environ.keys():
+            if key.startswith("DB_SOURCE_") and key.endswith("_HOST"):
+                source_id = key.replace("DB_SOURCE_", "").replace("_HOST", "").lower()
+                source_ids.add(("source_params", source_id))
+        
+        # Check for legacy DB_SOURCE_<ID>_URL format
         for key in os.environ.keys():
             if key.startswith("DB_SOURCE_") and key.endswith("_URL"):
                 source_id = key.replace("DB_SOURCE_", "").replace("_URL", "").lower()
-                source_ids.add(("source", source_id))
+                if ("source_params", source_id) not in source_ids:  # Only add if not already added via params
+                    source_ids.add(("source_url", source_id))
         
         # Check for legacy DB_CONN_ format  
         for key in os.environ.keys():
             if key.startswith("DB_CONN_") and key.endswith("_URL"):
                 conn_id = key.replace("DB_CONN_", "").replace("_URL", "").lower()
                 source_ids.add(("conn", conn_id))
+                
+        return source_ids
+    
+    def _load_single_source_connection(self, format_type: str, source_id: str):
+        """Load a single source connection based on format type"""
+        if format_type == "source_params":
+            self._load_source_from_params(source_id)
+        elif format_type == "source_url":
+            self._load_source_from_url(source_id)
+        else:  # format_type == "conn"
+            self._load_legacy_connection(source_id)
+    
+    def _load_source_from_params(self, source_id: str):
+        """Load source connection from individual parameters"""
+        db_type = os.getenv("DB_TYPE", "postgresql")
+        host = os.getenv(f"DB_SOURCE_{source_id.upper()}_HOST")
+        port = os.getenv(f"DB_SOURCE_{source_id.upper()}_PORT")
+        db_name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME_DB")
+        user = os.getenv(f"DB_SOURCE_{source_id.upper()}_USER")
+        password = os.getenv(f"DB_SOURCE_{source_id.upper()}_PASSWORD")
         
-        # Process all source connections
-        for format_type, source_id in source_ids:
-            if format_type == "source":
-                name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME", f"Source {source_id}")
-                url = os.getenv(f"DB_SOURCE_{source_id.upper()}_URL")
-                description = os.getenv(f"DB_SOURCE_{source_id.upper()}_DESC", "Source database")
-                connection_id = f"source_{source_id}"
-            else:  # format_type == "conn"
-                name = os.getenv(f"DB_CONN_{source_id.upper()}_NAME", f"Database {source_id}")
-                url = os.getenv(f"DB_CONN_{source_id.upper()}_URL")
-                description = os.getenv(f"DB_CONN_{source_id.upper()}_DESC", "Legacy connection")
-                connection_id = source_id
-            
-            if url:
-                self.add_connection_from_url(connection_id, name, url, description)
+        if all([host, port, db_name, user, password]):
+            url = self._build_connection_url(db_type, user, password, host, port, db_name)  # type: ignore
+            name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME", f"Source {source_id}")
+            description = os.getenv(f"DB_SOURCE_{source_id.upper()}_DESC", "Source database")
+            connection_id = f"source_{source_id}"
+            self.add_connection_from_url(connection_id, name, url, description)
+    
+    def _load_source_from_url(self, source_id: str):
+        """Load source connection from URL"""
+        name = os.getenv(f"DB_SOURCE_{source_id.upper()}_NAME", f"Source {source_id}")
+        url = os.getenv(f"DB_SOURCE_{source_id.upper()}_URL")
+        description = os.getenv(f"DB_SOURCE_{source_id.upper()}_DESC", "Source database")
+        connection_id = f"source_{source_id}"
+        if url:
+            self.add_connection_from_url(connection_id, name, url, description)
+    
+    def _load_legacy_connection(self, source_id: str):
+        """Load legacy DB_CONN connection"""
+        name = os.getenv(f"DB_CONN_{source_id.upper()}_NAME", f"Database {source_id}")
+        url = os.getenv(f"DB_CONN_{source_id.upper()}_URL")
+        description = os.getenv(f"DB_CONN_{source_id.upper()}_DESC", "Legacy connection")
+        if url:
+            self.add_connection_from_url(source_id, name, url, description)
     
     def add_connection_from_url(self, conn_id: str, name: str, url: str, description: str = ""):
         """Add a database connection from a PostgreSQL URL"""
