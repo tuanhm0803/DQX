@@ -113,7 +113,6 @@
                                     <th>User</th>
                                     <th>Action</th>
                                     <th>Resource</th>
-                                    <th>IP Address</th>
                                     <th>Details</th>
                                 </tr>
                             </thead>
@@ -141,9 +140,6 @@
                                         {% else %}
                                             <small class="text-muted">N/A</small>
                                         {% endif %}
-                                    </td>
-                                    <td>
-                                        <small class="text-muted">{{ log.ip_address or 'N/A' }}</small>
                                     </td>
                                     <td>
                                         {% if log.details %}

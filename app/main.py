@@ -7,68 +7,10 @@ from starlette.middleware.sessions import SessionMiddleware
 import os
 from app import crud
 from app.database import get_db
-from .routes import tables, query, sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin, user_actions_log
+from .routes import sql_scripts, stats, scheduler, bad_detail, auth, reference_tables, source_data_management, admin, user_actions_log
 from .dependencies import templates, render_template
 from .dependencies_auth import login_required, get_current_user_from_cookie
-from .middleware_logging import UserActionLoggingMiddleware
-
-# User middleware
-class UserMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Store user in request state if available
-        request.state.user = None  # Initialize user as None
-        
-        try:
-            # Extract token from cookies if available
-            cookies = request.cookies
-            access_token = cookies.get("access_token")
-            
-            # Only process if there's a token
-            if access_token:
-                # Extract the token from the "Bearer <token>" format
-                if access_token.startswith("Bearer "):
-                    token = access_token[7:]
-                else:
-                    token = access_token
-                    
-                # Try to decode the token and get the user
-                from jose import JWTError, jwt
-                from app.auth import SECRET_KEY, ALGORITHM
-                from app import crud
-                
-                try:
-                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-                    username = payload.get("sub")
-                    if username:
-                        # Get database connection safely
-                        try:
-                            # Use the database dependency properly
-                            db_gen = get_db()
-                            conn = next(db_gen)
-                            user = crud.get_user_by_username(conn, username)
-                            request.state.user = user
-                        except Exception as db_error:
-                            # Log database error but don't break the request
-                            print(f"Database error in UserMiddleware: {db_error}")
-                            request.state.user = None
-                        finally:
-                            # Properly close the database connection
-                            try:
-                                if 'db_gen' in locals():
-                                    db_gen.close()
-                            except Exception:
-                                pass  # Ignore close errors
-                except JWTError:
-                    request.state.user = None
-                    
-        except Exception as e:
-            # Log any other errors but continue processing
-            print(f"Error in UserMiddleware: {e}")
-            request.state.user = None
-                
-        # Always continue to the next handler
-        response = await call_next(request)
-        return response
+from .middleware_logging import UserActionLoggingMiddleware, UserMiddleware
 
 # FastAPI app
 app = FastAPI(title="Database Explorer API")
@@ -112,12 +54,9 @@ app.include_router(auth.public_router)
 app.include_router(auth.protected_router, dependencies=[Depends(login_required)])
 
 # Include API routers
-app.include_router(tables.router, prefix="/api/tables", tags=["API - Tables"], dependencies=[Depends(login_required)])
-app.include_router(query.router, prefix="/api/query_db", tags=["API - Query"], dependencies=[Depends(login_required)])
 app.include_router(sql_scripts.api_router, prefix="/api/scripts", tags=["API - SQL Scripts"], dependencies=[Depends(login_required)])
 app.include_router(stats.router, prefix="/api/stats", tags=["API - Stats"], dependencies=[Depends(login_required)])
 app.include_router(scheduler.router, prefix="/api/schedules", tags=["API - Schedules"], dependencies=[Depends(login_required)])
-# Chat logger functionality has been removed
 
 # Include Page routers (protected by login_required)
 app.include_router(sql_scripts.page_router, tags=["Pages"], dependencies=[Depends(login_required)])

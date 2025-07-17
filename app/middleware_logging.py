@@ -1,5 +1,14 @@
 """
-Middleware for logging user actions in the DQX application.
+Middleware for user authentication and action logging in the DQX application.
+
+This module contains all middleware classes for the DQX application:
+
+1. UserMiddleware: Extracts user information from JWT tokens and stores it in request state
+2. UserActionLoggingMiddleware: Logs user actions for audit and security purposes
+
+The middleware are applied in the following order in main.py:
+1. UserMiddleware (first - to have user available for other middleware)
+2. UserActionLoggingMiddleware (second - to log actions with user context)
 """
 
 from fastapi import Request
@@ -7,6 +16,77 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app import crud
 from app.database import get_db
 import json
+
+
+class UserMiddleware(BaseHTTPMiddleware):
+    """Middleware to extract and store user information in request state."""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Initialize user as None
+        request.state.user = None
+        
+        try:
+            # Extract and process user token
+            self._process_user_token(request)
+        except Exception as e:
+            # Log any errors but continue processing
+            print(f"Error in UserMiddleware: {e}")
+            request.state.user = None
+                
+        # Always continue to the next handler
+        response = await call_next(request)
+        return response
+    
+    def _process_user_token(self, request: Request):
+        """Extract and process user authentication token."""
+        # Extract token from cookies
+        access_token = request.cookies.get("access_token")
+        if not access_token:
+            return
+            
+        # Extract the token from the "Bearer <token>" format
+        token = access_token[7:] if access_token.startswith("Bearer ") else access_token
+        
+        # Decode token and get user
+        try:
+            user = self._decode_token_and_get_user(token)
+            request.state.user = user
+        except Exception as e:
+            print(f"Token processing error: {e}")
+            request.state.user = None
+    
+    def _decode_token_and_get_user(self, token: str):
+        """Decode JWT token and fetch user from database."""
+        from jose import JWTError, jwt
+        from app.auth import SECRET_KEY, ALGORITHM
+        from app import crud
+        
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username = payload.get("sub")
+            if not username:
+                return None
+                
+            return self._get_user_from_database(username)
+        except JWTError:
+            return None
+    
+    def _get_user_from_database(self, username: str):
+        """Fetch user from database safely."""
+        db_gen = None
+        try:
+            db_gen = get_db()
+            conn = next(db_gen)
+            return crud.get_user_by_username(conn, username)
+        except Exception as db_error:
+            print(f"Database error in UserMiddleware: {db_error}")
+            return None
+        finally:
+            if db_gen:
+                try:
+                    db_gen.close()
+                except Exception:
+                    pass  # Ignore close errors
 
 
 class UserActionLoggingMiddleware(BaseHTTPMiddleware):
@@ -68,7 +148,6 @@ class UserActionLoggingMiddleware(BaseHTTPMiddleware):
             resource_id = self._extract_resource_id(path)
             
             # Get client info
-            ip_address = self._get_client_ip(request)
             user_agent = request.headers.get("user-agent")
             
             # Prepare details
@@ -89,7 +168,7 @@ class UserActionLoggingMiddleware(BaseHTTPMiddleware):
             db_gen = get_db()
             db = next(db_gen)
             try:
-                result = crud.log_user_action(
+                crud.log_user_action(
                     db=db,
                     user_id=user.id,
                     username=user.username,
@@ -97,7 +176,6 @@ class UserActionLoggingMiddleware(BaseHTTPMiddleware):
                     resource_type=action_info["resource_type"],
                     resource_id=resource_id,
                     details=details,
-                    ip_address=ip_address,
                     user_agent=user_agent
                 )
                 # Commit the transaction
@@ -157,20 +235,3 @@ class UserActionLoggingMiddleware(BaseHTTPMiddleware):
         # Look for numeric IDs in the path
         match = re.search(r'/(\d+)(?:/|$)', path)
         return int(match.group(1)) if match else None
-    
-    def _get_client_ip(self, request: Request):
-        """Get client IP address from request."""
-        # Check for forwarded headers first
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip
-        
-        # Fallback to direct client
-        if hasattr(request, 'client') and request.client:
-            return request.client.host
-        
-        return None

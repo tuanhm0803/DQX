@@ -5,6 +5,7 @@ Handles database operations for SQL scripts, table management, and execution.
 
 import psycopg2
 import json
+import os
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -20,25 +21,27 @@ from app.user_crud import (
     deactivate_user
 )
 
+# Get database type from environment
+DB_TYPE = os.getenv("DB_TYPE", "postgresql").lower()
+
 
 # ========================================================================================
 # HELPER FUNCTIONS
 # ========================================================================================
 
-def _quote_identifier(name: str) -> str:
-    """Safely quote a SQL identifier (table name, column name, schema name)."""
-    clean_name = name.replace('"', '""')
-    return f'"{clean_name}"'
-
-
 def _build_placeholder_list(count: int) -> str:
-    """Build a list of parameter placeholders."""
-    return ', '.join(['%s'] * count)
+    """Build a list of parameter placeholders for the current database type."""
+    if DB_TYPE == "oracle":
+        # Oracle uses numbered placeholders like :1, :2, :3
+        return ', '.join([f":{i+1}" for i in range(count)])
+    else:
+        # PostgreSQL and others use %s
+        return ', '.join(['%s'] * count)
 
 
 def _build_column_list(columns: List[str]) -> str:
-    """Build a comma-separated list of quoted column identifiers."""
-    return ', '.join(_quote_identifier(col) for col in columns)
+    """Build a comma-separated list of column identifiers."""
+    return ', '.join(columns)
 
 
 def _get_stg_table_name_str(script_id: int) -> str:
@@ -170,208 +173,6 @@ def get_bad_detail_count(db) -> int:
         return 0
 
 
-def get_stats(db) -> Dict[str, int]:
-    """Get statistics for dashboard."""
-    return {
-        "script_count": get_script_count(db),
-        "bad_detail_count": get_bad_detail_count(db)
-    }
-
-
-# ========================================================================================
-# TABLE OPERATIONS
-# ========================================================================================
-
-def get_schemas(db) -> List[str]:
-    """Get all schemas in the database."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        cursor.execute("SELECT schema_name FROM information_schema.schemata;")
-        return [row[0] for row in cursor.fetchall()]
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def get_dq_table_names(db) -> List[str]:
-    """Get all tables in the 'DQ' schema."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'dq';")
-        return [row[0] for row in cursor.fetchall()]
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def get_dq_table_structure(table_name: str, db) -> Dict[str, List[tuple]]:
-    """Get the structure of a specific table."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        cursor.execute(
-            "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = %s AND table_schema = 'dq';",
-            (table_name,)
-        )
-        return {"columns": cursor.fetchall()}
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def get_dq_table_data(table_name: str, skip: int, limit: int, db) -> Dict[str, Any]:
-    """Get data from a specific table with pagination."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        
-        # Get column names
-        cursor.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s AND table_schema = 'dq' ORDER BY ordinal_position;",
-            (table_name,)
-        )
-        column_names_result = cursor.fetchall()
-        if not column_names_result:
-            raise ValueError(f"Table '{table_name}' not found or has no columns in schema 'dq'.")
-        
-        column_names = [row[0] for row in column_names_result]
-        fields = _build_column_list(column_names)
-        
-        # Fetch data
-        query = f"SELECT {fields} FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)} LIMIT %s OFFSET %s;"
-        cursor.execute(query, (limit, skip))
-        result = cursor.fetchall()
-        
-        data = [_process_result_row(row, column_names) for row in result]
-        
-        # Get total count
-        count_query = f"SELECT COUNT(*) FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)};"
-        cursor.execute(count_query)
-        total_count = cursor.fetchone()[0]
-        
-        return {"data": data, "total": total_count, "skip": skip, "limit": limit}
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def insert_table_data(table_name: str, data: Dict[str, Any], db) -> Dict[str, Any]:
-    """Insert data into a specific table."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        
-        columns = list(data.keys())
-        values = [data[column] for column in columns]
-        
-        # Check if 'id' column exists for RETURNING clause
-        cursor.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s AND column_name = 'id' AND table_schema = 'dq';",
-            (table_name,)
-        )
-        id_column_exists = cursor.fetchone()
-
-        returning_sql = " RETURNING id" if id_column_exists else ""
-        cols = _build_column_list(columns)
-        vals = _build_placeholder_list(len(values))
-
-        query = f"INSERT INTO {_quote_identifier('dq')}.{_quote_identifier(table_name)} ({cols}) VALUES ({vals}){returning_sql};"
-        
-        cursor.execute(query, values)
-        inserted_id = None
-        if id_column_exists and cursor.rowcount > 0 and cursor.description:
-            inserted_id = cursor.fetchone()[0]
-        
-        db.commit()
-        return {"success": True, "id": inserted_id, "inserted_rows": cursor.rowcount}
-    except Exception:
-        if db:
-            db.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def update_table_data(table_name: str, record_id: Any, data: Dict[str, Any], id_column: str, db) -> Dict[str, Any]:
-    """Update data in a specific table by ID."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        
-        set_clause_parts = []
-        values = []
-        for column, value in data.items():
-            set_clause_parts.append(f"{_quote_identifier(column)} = %s")
-            values.append(value)
-        values.append(record_id)
-        
-        set_parts = ', '.join(set_clause_parts)
-        query = f"UPDATE {_quote_identifier('dq')}.{_quote_identifier(table_name)} SET {set_parts} WHERE {_quote_identifier(id_column)} = %s;"
-        
-        cursor.execute(query, values)
-        updated_rows = cursor.rowcount
-        db.commit()
-        return {"success": True, "updated_rows": updated_rows}
-    except Exception:
-        if db:
-            db.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def delete_table_data(table_name: str, record_id: Any, id_column: str, db) -> Dict[str, Any]:
-    """Delete data from a specific table by ID."""
-    cursor = None
-    try:
-        cursor = db.cursor()
-        query = f"DELETE FROM {_quote_identifier('dq')}.{_quote_identifier(table_name)} WHERE {_quote_identifier(id_column)} = %s;"
-        cursor.execute(query, (record_id,))
-        deleted_rows = cursor.rowcount
-        db.commit()
-        return {"success": True, "deleted_rows": deleted_rows}
-    except Exception:
-        if db:
-            db.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-
-
-def execute_query(query_string: str, db, params=None) -> Dict[str, Any]:
-    """Execute a custom SQL query (SELECT only)."""
-    if not query_string.strip().lower().startswith("select"):
-        raise ValueError("Only SELECT queries are allowed for execute_query.")
-    
-    cursor = None
-    try:
-        cursor = db.cursor()
-        if params:
-            cursor.execute(query_string, params)
-        else:
-            cursor.execute(query_string)
-        
-        if cursor.description: 
-            column_names = [desc[0] for desc in cursor.description]
-            result = cursor.fetchall()
-            data = [_process_result_row(row, column_names) for row in result]
-            return {"data": data, "count": len(data), "columns": column_names}
-        else: 
-            return {"message": "Query executed successfully.", "rowcount": cursor.rowcount}
-    except Exception:
-        if db:
-            db.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-
-
 # ========================================================================================
 # SQL SCRIPT MANAGEMENT
 # ========================================================================================
@@ -381,7 +182,7 @@ def get_sql_scripts(db) -> List[Dict[str, Any]]:
     cursor = None
     try:
         cursor = db.cursor()
-        query = f"SELECT id, name, description, content, created_at, updated_at FROM {_quote_identifier('dq')}.{_quote_identifier('dq_sql_scripts')} ORDER BY id ASC;"
+        query = "SELECT id, name, description, content, created_at, updated_at FROM DQ.dq_sql_scripts ORDER BY id ASC;"
         cursor.execute(query)
         
         fetched_rows = cursor.fetchall()
@@ -531,7 +332,7 @@ def _create_staging_table(cursor, script_id: int, script_content: str):
     stg_table_name_str = _get_stg_table_name_str(script_id)
     
     # Drop if it exists
-    drop_table_query = f"DROP TABLE IF EXISTS {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
+    drop_table_query = f"DROP TABLE IF EXISTS stg.{stg_table_name_str};"
     cursor.execute(drop_table_query)
 
     # Clean script content
@@ -540,7 +341,7 @@ def _create_staging_table(cursor, script_id: int, script_content: str):
         clean_script_content = clean_script_content[:-1]
 
     # Create the table
-    create_table_query = f"CREATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} AS ({clean_script_content}) WITH NO DATA;"
+    create_table_query = f"CREATE TABLE stg.{stg_table_name_str} AS ({clean_script_content}) WITH NO DATA;"
     cursor.execute(create_table_query)
 
 
@@ -605,7 +406,7 @@ def delete_sql_script(db, script_id: int) -> Dict[str, Any]:
 
         # Drop the corresponding staging table
         stg_table_name_str = _get_stg_table_name_str(script_id)
-        drop_table_query = f"DROP TABLE IF EXISTS {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
+        drop_table_query = f"DROP TABLE IF EXISTS stg.{stg_table_name_str};"
         cursor.execute(drop_table_query)
 
         cursor.execute("DELETE FROM dq.dq_sql_scripts WHERE id = %s;", (script_id,))
@@ -622,50 +423,6 @@ def delete_sql_script(db, script_id: int) -> Dict[str, Any]:
         raise
     finally:
         if cursor: 
-            cursor.close()
-
-
-def execute_sql_script(script_content: str, db) -> Dict[str, Any]:
-    """Execute the provided SQL script content after validating its structure."""
-    _validate_sql_script_columns(script_content)
-
-    cursor = None
-    try:
-        cursor = db.cursor()
-        cursor.execute(script_content)
-        
-        results = []
-        columns = []
-
-        if cursor.description: 
-            columns = [desc[0] for desc in cursor.description]
-            fetched_rows = cursor.fetchall()
-            for row in fetched_rows:
-                results.append(_process_result_row(row, columns))
-        
-        # Commit if needed
-        script_lower_trimmed = script_content.strip().lower()
-        if not script_lower_trimmed.startswith("select") and "returning" not in script_lower_trimmed:
-            if cursor.rowcount > 0 or any(kw in script_lower_trimmed for kw in ["insert", "update", "delete", "create", "alter", "drop", "truncate"]):
-                 db.commit()
-            
-        return {
-            "message": "Script executed successfully.", 
-            "rowcount": cursor.rowcount, 
-            "columns": columns, 
-            "data": results      
-        }
-
-    except psycopg2.Error as db_err:
-        if db: 
-            db.rollback()
-        raise ValueError(f"Database error: {db_err.pgcode if db_err.pgcode else ''} - {db_err.pgerror if db_err.pgerror else str(db_err)}") from db_err
-    except Exception as e:
-        if db: 
-            db.rollback()
-        raise ValueError(f"Execution failed: {str(e)}") from e
-    finally:
-        if cursor:
             cursor.close()
 
 
@@ -697,14 +454,14 @@ def populate_script_result_table(db, script_id: int) -> Dict[str, Any]:
         table_exists = cursor.fetchone()[0]
 
         if not table_exists:
-            create_table_query = f"CREATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} AS ({clean_script_content}) WITH NO DATA;"
+            create_table_query = f"CREATE TABLE stg.{stg_table_name_str} AS ({clean_script_content}) WITH NO DATA;"
             cursor.execute(create_table_query)
         else:
-            truncate_query = f"TRUNCATE TABLE {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
+            truncate_query = f"TRUNCATE TABLE stg.{stg_table_name_str};"
             cursor.execute(truncate_query)
 
         # Insert data
-        insert_query = f"INSERT INTO {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)} {clean_script_content};"
+        insert_query = f"INSERT INTO stg.{stg_table_name_str} {clean_script_content};"
         cursor.execute(insert_query)
         inserted_rows = cursor.rowcount
         
@@ -730,7 +487,7 @@ def publish_script_results(db, script_id: int) -> Dict[str, Any]:
         cursor = db.cursor()
 
         # Get distinct (rule_id, source_id) pairs from the staging table
-        get_keys_query = f"SELECT DISTINCT rule_id, source_id FROM {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};"
+        get_keys_query = f"SELECT DISTINCT rule_id, source_id FROM stg.{stg_table_name_str};"
         cursor.execute(get_keys_query)
         keys_to_replace = cursor.fetchall()
 
@@ -738,14 +495,14 @@ def publish_script_results(db, script_id: int) -> Dict[str, Any]:
             return {"success": True, "message": "Staging table is empty. Nothing to publish.", "published_rows": 0}
         
         # Delete existing records
-        delete_query = f"DELETE FROM {_quote_identifier('dq')}.{_quote_identifier('bad_detail')} WHERE (rule_id, source_id) IN %s;"
+        delete_query = "DELETE FROM DQ.bad_detail WHERE (rule_id, source_id) IN %s;"
         cursor.execute(delete_query, (tuple(keys_to_replace),))
 
         # Insert new records
         insert_query = f"""
-            INSERT INTO {_quote_identifier('dq')}.{_quote_identifier('bad_detail')} (rule_id, source_id, source_uid, data_value, txn_date)
+            INSERT INTO DQ.bad_detail (rule_id, source_id, source_uid, data_value, txn_date)
             SELECT rule_id, source_id, source_uid, data_value, txn_date
-            FROM {_quote_identifier('stg')}.{_quote_identifier(stg_table_name_str)};
+            FROM stg.{stg_table_name_str};
         """
         cursor.execute(insert_query)
         published_rows = cursor.rowcount
@@ -851,7 +608,7 @@ def update_schedule(db, schedule_id: int, schedule_data: Dict[str, Any]) -> Opti
         values = []
         for key, value in schedule_data.items():
             if value is not None:
-                set_parts.append(f"{_quote_identifier(key)} = %s")
+                set_parts.append(f"{key} = %s")
                 values.append(value)
 
         if not set_parts:
@@ -897,15 +654,15 @@ def delete_schedule(db, schedule_id: int) -> Dict[str, Any]:
 
 def log_user_action(db, user_id: int, username: str, action: str, 
                    resource_type: Optional[str] = None, resource_id: Optional[int] = None, 
-                   details: Optional[dict] = None, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
+                   details: Optional[dict] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
     """Log a user action for audit purposes."""
     try:
         cursor = db.cursor()
         
         insert_query = """
             INSERT INTO dq.user_actions_log 
-            (user_id, username, action, resource_type, resource_id, details, ip_address, user_agent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (user_id, username, action, resource_type, resource_id, details, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id, created_at;
         """
         
@@ -913,7 +670,7 @@ def log_user_action(db, user_id: int, username: str, action: str,
         
         cursor.execute(insert_query, (
             user_id, username, action, resource_type, resource_id,
-            details_json, ip_address, user_agent
+            details_json, user_agent
         ))
         
         result = cursor.fetchone()
@@ -955,7 +712,7 @@ def get_user_actions_log(db, limit: int = 100, offset: int = 0,
         # Build query for logs
         base_query = """
             SELECT id, user_id, username, action, resource_type, resource_id, 
-                   details, ip_address, user_agent, created_at
+                   details, user_agent, created_at
             FROM dq.user_actions_log
         """
         
@@ -1019,9 +776,8 @@ def get_user_actions_log(db, limit: int = 100, offset: int = 0,
                 "resource_type": row[4],
                 "resource_id": row[5],
                 "details": row[6] if row[6] else None,  # JSONB is already deserialized
-                "ip_address": str(row[7]) if row[7] else None,
-                "user_agent": row[8],
-                "created_at": row[9]
+                "user_agent": row[7],
+                "created_at": row[8]
             }
             for row in results
         ]
@@ -1039,76 +795,6 @@ def get_user_actions_log(db, limit: int = 100, offset: int = 0,
 # ========================================================================================
 # SCHEDULE RUN LOG OPERATIONS
 # ========================================================================================
-
-def create_schedule_run_log(db, schedule_id: int, job_name: str, script_id: int, 
-                           script_name: str, created_by_user_id: Optional[int] = None) -> Dict[str, Any]:
-    """Create a new schedule run log entry."""
-    try:
-        cursor = db.cursor()
-        
-        insert_query = """
-            INSERT INTO dq.schedule_run_log 
-            (schedule_id, job_name, script_id, script_name, status, created_by_user_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id, started_at;
-        """
-        
-        cursor.execute(insert_query, (
-            schedule_id, job_name, script_id, script_name, 'running', created_by_user_id
-        ))
-        
-        result = cursor.fetchone()
-        db.commit()
-        
-        return {
-            "success": True,
-            "log_id": result[0],
-            "started_at": result[1]
-        }
-        
-    except Exception as e:
-        db.rollback()
-        return {"success": False, "error": str(e)}
-
-def update_schedule_run_log(db, log_id: int, status: str, rows_affected: Optional[int] = None, 
-                           error_message: Optional[str] = None, auto_published: bool = False) -> Dict[str, Any]:
-    """Update a schedule run log entry with completion details."""
-    try:
-        cursor = db.cursor()
-        
-        # Calculate duration
-        duration_query = """
-            SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer as duration
-            FROM dq.schedule_run_log WHERE id = %s
-        """
-        cursor.execute(duration_query, (log_id,))
-        duration_result = cursor.fetchone()
-        duration_seconds = duration_result[0] if duration_result else None
-        
-        update_query = """
-            UPDATE dq.schedule_run_log 
-            SET status = %s, completed_at = CURRENT_TIMESTAMP, duration_seconds = %s,
-                rows_affected = %s, error_message = %s, auto_published = %s
-            WHERE id = %s
-            RETURNING completed_at;
-        """
-        
-        cursor.execute(update_query, (
-            status, duration_seconds, rows_affected, error_message, auto_published, log_id
-        ))
-        
-        result = cursor.fetchone()
-        db.commit()
-        
-        return {
-            "success": True,
-            "completed_at": result[0] if result else None,
-            "duration_seconds": duration_seconds
-        }
-        
-    except Exception as e:
-        db.rollback()
-        return {"success": False, "error": str(e)}
 
 def get_schedule_run_logs(db, limit: int = 100, offset: int = 0, 
                          schedule_id: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1164,3 +850,54 @@ def get_schedule_run_logs(db, limit: int = 100, offset: int = 0,
         
     except Exception as e:
         return []
+
+
+# ========================================================================================
+# QUERY EXECUTION
+# ========================================================================================
+
+def execute_query(query: str, db, params: Optional[List[Any]] = None) -> Dict[str, Any]:
+    """
+    Execute a SQL query and return results in a standardized format.
+    
+    Args:
+        query: SQL query string to execute
+        db: Database connection
+        params: Optional list of parameters for the query
+        
+    Returns:
+        Dictionary with 'data' key containing list of row dictionaries,
+        and 'column_names' key containing list of column names
+    """
+    cursor = None
+    try:
+        cursor = db.cursor()
+        
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        
+        # Get column names from cursor description
+        column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+        
+        # Fetch all rows
+        rows = cursor.fetchall()
+        
+        # Process rows into dictionaries
+        data = []
+        for row in rows:
+            data.append(_process_result_row(row, column_names))
+        
+        return {
+            "data": data,
+            "column_names": column_names
+        }
+        
+    except psycopg2.Error as db_err:
+        raise ValueError(f"Database query failed: {str(db_err)}") from db_err
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred in execute_query: {str(e)}") from e
+    finally:
+        if cursor:
+            cursor.close()

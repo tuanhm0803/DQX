@@ -116,7 +116,6 @@ class UserActionLog(UserActionLogBase):
     id: int
     user_id: int
     username: str
-    ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     created_at: datetime
 
